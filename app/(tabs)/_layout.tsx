@@ -3,7 +3,7 @@ import { useEffect } from 'react';
 import { Text } from 'react-native';
 
 import { fonts, palette } from '@/constants/theme';
-import { useStepSync } from '@/hooks/useStepSync';
+import { StepSyncProvider } from '@/hooks/useStepSync';
 import { useAuthStore } from '@/store/authStore';
 import { useGameStore } from '@/store/gameStore';
 
@@ -11,18 +11,12 @@ function TabIcon({ emoji }: { emoji: string }) {
   return <Text style={{ fontSize: 18 }}>{emoji}</Text>;
 }
 
-export default function TabLayout() {
-  const user = useAuthStore((s) => s.user);
-  const onboarded = useGameStore((s) => s.player.onboarded);
+function TabsInner() {
   const ensureToday = useGameStore((s) => s.ensureToday);
-  useStepSync();
 
   useEffect(() => {
     ensureToday();
   }, [ensureToday]);
-
-  if (!user) return <Redirect href="/(auth)/welcome" />;
-  if (!onboarded) return <Redirect href="/onboarding" />;
 
   return (
     <Tabs
@@ -33,8 +27,9 @@ export default function TabLayout() {
         tabBarStyle: {
           backgroundColor: '#F8E7C9',
           borderTopColor: palette.woodLight,
-          height: 64,
-          paddingTop: 6,
+          height: 62,
+          paddingTop: 4,
+          paddingBottom: 6,
         },
         tabBarLabelStyle: {
           fontFamily: fonts.bodyBold,
@@ -62,13 +57,29 @@ export default function TabLayout() {
         options={{ title: 'Mine', tabBarIcon: () => <TabIcon emoji="⛏️" /> }}
       />
       <Tabs.Screen
-        name="goals"
-        options={{ title: 'Goals', tabBarIcon: () => <TabIcon emoji="🎁" /> }}
+        name="more"
+        options={{
+          title: 'More',
+          tabBarIcon: () => <TabIcon emoji="☰" />,
+        }}
       />
-      <Tabs.Screen
-        name="achievements"
-        options={{ title: 'Badges', tabBarIcon: () => <TabIcon emoji="🏆" /> }}
-      />
+      <Tabs.Screen name="goals" options={{ href: null }} />
+      <Tabs.Screen name="friends" options={{ href: null }} />
+      <Tabs.Screen name="achievements" options={{ href: null }} />
     </Tabs>
+  );
+}
+
+export default function TabLayout() {
+  const user = useAuthStore((s) => s.user);
+  const onboarded = useGameStore((s) => s.player.onboarded);
+
+  if (!user) return <Redirect href="/(auth)/welcome" />;
+  if (!onboarded) return <Redirect href="/onboarding" />;
+
+  return (
+    <StepSyncProvider>
+      <TabsInner />
+    </StepSyncProvider>
   );
 }

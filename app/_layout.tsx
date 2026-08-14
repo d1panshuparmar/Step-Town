@@ -18,6 +18,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { LoadingGate } from '@/components/ui';
 import { palette } from '@/constants/theme';
 import { useCloudSync } from '@/hooks/useCloudSync';
+import '@/lib/stepBackground';
 import { useAuthStore } from '@/store/authStore';
 import { useGameStore } from '@/store/gameStore';
 
@@ -77,6 +78,10 @@ export default function RootLayout() {
         <Stack.Screen name="(auth)" />
         <Stack.Screen name="onboarding" />
         <Stack.Screen name="(tabs)" />
+        <Stack.Screen
+          name="friend/[id]"
+          options={{ presentation: 'card', animation: 'slide_from_right' }}
+        />
       </Stack>
     </GestureHandlerRootView>
   );

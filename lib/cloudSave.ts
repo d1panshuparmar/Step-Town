@@ -1,5 +1,10 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
+import {
+  ensureMyProfile,
+  publishFriendSnapshot,
+  snapshotFromSave,
+} from '@/lib/friends';
 import { getSupabase, isSupabaseConfigured } from '@/lib/supabase';
 import type { CloudSavePayload } from '@/lib/types';
 
@@ -28,7 +33,8 @@ export async function pullCloudSave(
 
 export async function pushCloudSave(
   userId: string,
-  payload: CloudSavePayload
+  payload: CloudSavePayload,
+  meta?: { email?: string }
 ): Promise<void> {
   if (isSupabaseConfigured) {
     const supabase = getSupabase()!;
@@ -38,8 +44,22 @@ export async function pushCloudSave(
       updated_at: new Date().toISOString(),
     });
     if (error) throw error;
-    return;
+  } else {
+    await AsyncStorage.setItem(localKey(userId), JSON.stringify(payload));
   }
 
-  await AsyncStorage.setItem(localKey(userId), JSON.stringify(payload));
+  // Always publish a friends-visible snapshot (no private economy data).
+  try {
+    const email = meta?.email ?? '';
+    const profile = await ensureMyProfile({
+      userId,
+      email,
+      townName: payload.player.townName,
+    });
+    await publishFriendSnapshot(
+      snapshotFromSave(userId, email || profile.email, profile.friendCode, payload)
+    );
+  } catch {
+    /* friends publish is best-effort */
+  }
 }

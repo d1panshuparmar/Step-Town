@@ -65,6 +65,7 @@ export default function SignupScreen() {
           />
           <SecondaryButton label="I already have an account" onPress={() => router.replace('/(auth)/login')} />
         </View>
+        <Text style={styles.credit}>made by d1panshuparmar</Text>
       </KeyboardAvoidingView>
     </Screen>
   );
@@ -72,7 +73,7 @@ export default function SignupScreen() {
 
 const styles = StyleSheet.create({
   wrap: { flex: 1, gap: spacing.md, paddingTop: spacing.md },
-  form: { gap: 10, marginTop: spacing.md },
+  form: { gap: 10, marginTop: spacing.md, flexGrow: 1 },
   label: {
     fontFamily: fonts.bodyBold,
     color: palette.inkMuted,
@@ -93,5 +94,14 @@ const styles = StyleSheet.create({
     fontFamily: fonts.bodyBold,
     color: palette.danger,
     fontSize: 13,
+  },
+  credit: {
+    marginTop: 'auto',
+    textAlign: 'center',
+    fontFamily: fonts.bodyBold,
+    fontSize: 13,
+    color: palette.ink,
+    opacity: 0.7,
+    paddingBottom: 8,
   },
 });

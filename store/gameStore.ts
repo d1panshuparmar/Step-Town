@@ -249,22 +249,28 @@ export const useGameStore = create<GameStore>()(
         const date = todayKey();
         const prevLedger = state.ledger.find((l) => l.date === date);
         const accountedSteps = prevLedger?.rawSteps ?? 0;
+        // Never allow a sensor glitch to reduce today's total mid-day
+        const safeTotal = Math.max(
+          todaySteps,
+          state.player.todayDate === date ? state.player.todaySteps : 0,
+          accountedSteps
+        );
         const mult = streakMultiplier(state.player.streak);
         const { coins, cappedFlag } = coinsFromStepDelta(
           accountedSteps,
-          todaySteps,
+          safeTotal,
           mult
         );
 
         let player: Player = {
           ...state.player,
-          todaySteps,
+          todaySteps: safeTotal,
           todayDate: date,
           lastStepSyncAt: Date.now(),
-          lastKnownSteps: todaySteps,
+          lastKnownSteps: safeTotal,
           coins: state.player.coins + coins,
         };
-        player = applyWalkStreak(player, todaySteps, date);
+        player = applyWalkStreak(player, safeTotal, date);
 
         let achievements = state.achievements;
         if (player.streak >= 3) {
@@ -276,14 +282,14 @@ export const useGameStore = create<GameStore>()(
             player,
             ledger: upsertLedger(state.ledger, {
               date,
-              rawSteps: todaySteps,
+              rawSteps: safeTotal,
               convertedCoins: (prevLedger?.convertedCoins ?? 0) + coins,
               cappedFlag,
             }),
             dailyGoals: setGoalProgress(
               state.dailyGoals,
               'walk_steps',
-              todaySteps
+              safeTotal
             ),
             achievements,
             lastCoinToast: coins > 0 ? coins : state.lastCoinToast,

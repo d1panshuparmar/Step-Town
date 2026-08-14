@@ -61,6 +61,7 @@ export default function WelcomeScreen() {
         )}
         <PrimaryButton label="Create account" onPress={() => router.push('/(auth)/signup')} />
         <SecondaryButton label="Log in" onPress={() => router.push('/(auth)/login')} />
+        <Text style={styles.credit}>made by d1panshuparmar</Text>
       </View>
     </View>
   );
@@ -114,5 +115,13 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: palette.inkMuted,
     marginBottom: 4,
+  },
+  credit: {
+    marginTop: 14,
+    textAlign: 'center',
+    fontFamily: fonts.bodyBold,
+    fontSize: 13,
+    color: palette.ink,
+    opacity: 0.7,
   },
 });

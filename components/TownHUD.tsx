@@ -11,34 +11,45 @@ import {
   warehouseCapacity,
 } from '@/lib/townStats';
 import { useGameStore } from '@/store/gameStore';
+import { useStepSync } from '@/hooks/useStepSync';
 
 export function TownHUD() {
   const player = useGameStore((s) => s.player);
   const plots = useGameStore((s) => s.plots);
   const inventory = useGameStore((s) => s.inventory);
+  const { listening, liveSteps } = useStepSync();
   const need = xpForLevel(player.level);
   const xpPct = Math.min(1, player.xp / need);
   const pop = townPopulation(plots);
   const happy = townHappiness(plots);
   const used = inventoryUsed(inventory);
   const cap = warehouseCapacity(plots);
+  const stepsShown = Math.max(player.todaySteps, liveSteps);
 
   return (
     <View style={styles.wrap} pointerEvents="box-none">
       <View style={styles.brandRow}>
         <Text style={styles.brand}>Stepwize</Text>
-        <Text style={styles.town}>{player.townName || 'Your Town'}</Text>
+        <View style={styles.townRow}>
+          <View
+            style={[
+              styles.dot,
+              { backgroundColor: listening ? '#3DDC97' : '#FF8A80' },
+            ]}
+          />
+          <Text style={styles.town}>{player.townName || 'Your Town'}</Text>
+        </View>
       </View>
 
       <LinearGradient
-        colors={['#F8E7C9', '#E8CFA3']}
+        colors={['#FFF1D6', '#E8CFA3']}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
         style={styles.panel}>
         <View style={styles.stats}>
           <Pill emoji="🪙" value={formatNumber(player.coins)} />
           <Pill emoji="💎" value={formatNumber(player.gems)} />
-          <Pill emoji="👟" value={formatNumber(player.todaySteps)} />
+          <Pill emoji="👟" value={formatNumber(stepsShown)} />
           <Pill emoji="🔥" value={`${player.streak}`} />
         </View>
         <View style={styles.metaRow}>
@@ -80,11 +91,19 @@ const styles = StyleSheet.create({
   },
   brand: {
     fontFamily: fonts.display,
-    fontSize: 30,
+    fontSize: 26,
     color: palette.ink,
     letterSpacing: -0.8,
-    textShadowColor: 'rgba(255,255,255,0.5)',
-    textShadowRadius: 4,
+  },
+  townRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  dot: {
+    width: 8,
+    height: 8,
+    borderRadius: 99,
   },
   town: {
     fontFamily: fonts.bodyBold,
@@ -93,10 +112,10 @@ const styles = StyleSheet.create({
   },
   panel: {
     borderRadius: radii.lg,
-    padding: 12,
+    padding: 10,
     borderWidth: 2,
     borderColor: palette.wood,
-    gap: 8,
+    gap: 6,
   },
   stats: {
     flexDirection: 'row',
@@ -107,10 +126,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    backgroundColor: 'rgba(255,255,255,0.55)',
+    backgroundColor: 'rgba(255,255,255,0.7)',
     borderRadius: radii.sm,
     paddingHorizontal: 8,
     paddingVertical: 5,
+    borderWidth: 1,
+    borderColor: 'rgba(107,68,35,0.15)',
   },
   pillEmoji: { fontSize: 12 },
   pillText: {

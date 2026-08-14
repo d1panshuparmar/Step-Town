@@ -2,7 +2,7 @@
   "expo": {
     "name": "Stepwize",
     "slug": "stepwize",
-    "version": "1.0.0",
+    "version": "1.0.4",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "stepwize",
@@ -10,8 +10,8 @@
     "ios": {
       "supportsTablet": true,
       "infoPlist": {
-        "NSMotionUsageDescription": "Stepwize counts your steps so walking can earn coins to grow your town.",
-        "UIBackgroundModes": []
+        "NSMotionUsageDescription": "Stepwize counts your steps all day so walking earns coins for your town — even when the app is closed.",
+        "UIBackgroundModes": ["processing", "fetch"]
       },
       "bundleIdentifier": "com.stepwize.app"
     },
@@ -27,6 +27,9 @@
       "permissions": [
         "ACTIVITY_RECOGNITION",
         "android.permission.ACTIVITY_RECOGNITION",
+        "android.permission.HIGH_SAMPLING_RATE_SENSORS",
+        "android.permission.RECEIVE_BOOT_COMPLETED",
+        "android.permission.WAKE_LOCK",
         "android.permission.INTERNET"
       ],
       "package": "com.stepwize.app"
@@ -41,16 +44,30 @@
       "expo-font",
       "expo-secure-store",
       [
+        "expo-sensors",
+        {
+          "motionPermission": "Allow Step-Town to count your steps so walking earns coins for your town."
+        }
+      ],
+      [
         "expo-splash-screen",
         {
           "image": "./assets/images/splash-icon.png",
           "resizeMode": "contain",
           "backgroundColor": "#C8E6F0"
         }
-      ]
+      ],
+      "expo-background-task"
     ],
     "experiments": {
       "typedRoutes": true
-    }
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "1d6a0bf8-c438-44ab-80fe-124a5d486193"
+      }
+    },
+    "owner": "d1panshuparmar"
   }
 }

@@ -179,3 +179,35 @@ export type CloudSavePayload = {
   visitor: VisitorEvent | null;
   savedAt: number;
 };
+
+/** Public slice friends can see — no coins, inventory, or private economy. */
+export type FriendTownSnapshot = {
+  userId: string;
+  friendCode: string;
+  email: string;
+  townName: string;
+  level: number;
+  todaySteps: number;
+  todayDate: string;
+  streak: number;
+  plots: Plot[];
+  savedAt: number;
+};
+
+export type FriendshipStatus = 'pending' | 'accepted';
+
+export type Friendship = {
+  id: string;
+  requesterId: string;
+  addresseeId: string;
+  status: FriendshipStatus;
+  createdAt: number;
+};
+
+export type FriendProfile = {
+  id: string;
+  email: string;
+  friendCode: string;
+  townName: string;
+  displayName: string;
+};

@@ -1,5 +1,13 @@
-import { useEffect, useRef } from 'react';
-import { Animated, StyleSheet, Text } from 'react-native';
+import { useEffect } from 'react';
+import { StyleSheet, Text } from 'react-native';
+import Animated, {
+  Easing,
+  useAnimatedStyle,
+  useSharedValue,
+  withSequence,
+  withSpring,
+  withTiming,
+} from 'react-native-reanimated';
 
 import { fonts, palette, radii } from '@/constants/theme';
 import { useGameStore } from '@/store/gameStore';
@@ -7,32 +15,43 @@ import { useGameStore } from '@/store/gameStore';
 export function CoinToast() {
   const amount = useGameStore((s) => s.lastCoinToast);
   const clear = useGameStore((s) => s.clearCoinToast);
-  const opacity = useRef(new Animated.Value(0)).current;
+  const opacity = useSharedValue(0);
+  const y = useSharedValue(-12);
+  const scale = useSharedValue(0.9);
 
   useEffect(() => {
     if (amount <= 0) return;
-    opacity.setValue(0);
-    Animated.sequence([
-      Animated.timing(opacity, {
-        toValue: 1,
-        duration: 220,
-        useNativeDriver: true,
-      }),
-      Animated.delay(1100),
-      Animated.timing(opacity, {
-        toValue: 0,
-        duration: 320,
-        useNativeDriver: true,
-      }),
-    ]).start();
-    const t = setTimeout(() => clear(), 1800);
+    opacity.value = 0;
+    y.value = -12;
+    scale.value = 0.86;
+    opacity.value = withSequence(
+      withTiming(1, { duration: 180 }),
+      withTiming(1, { duration: 1100 }),
+      withTiming(0, { duration: 280, easing: Easing.in(Easing.quad) })
+    );
+    y.value = withSequence(
+      withSpring(0, { damping: 12, stiffness: 160 }),
+      withTiming(0, { duration: 1100 }),
+      withTiming(-10, { duration: 280 })
+    );
+    scale.value = withSequence(
+      withSpring(1.06, { damping: 10, stiffness: 180 }),
+      withSpring(1, { damping: 12, stiffness: 160 }),
+      withTiming(0.96, { duration: 280 })
+    );
+    const t = setTimeout(() => clear(), 1700);
     return () => clearTimeout(t);
-  }, [amount, clear, opacity]);
+  }, [amount, clear, opacity, scale, y]);
+
+  const style = useAnimatedStyle(() => ({
+    opacity: opacity.value,
+    transform: [{ translateY: y.value }, { scale: scale.value }],
+  }));
 
   if (amount <= 0) return null;
 
   return (
-    <Animated.View style={[styles.toast, { opacity }]}>
+    <Animated.View style={[styles.toast, style]} pointerEvents="none">
       <Text style={styles.text}>+{amount} Step Coins</Text>
     </Animated.View>
   );
@@ -41,17 +60,15 @@ export function CoinToast() {
 const styles = StyleSheet.create({
   toast: {
     position: 'absolute',
-    top: 120,
+    top: 118,
     alignSelf: 'center',
     backgroundColor: palette.coin,
     paddingHorizontal: 16,
     paddingVertical: 10,
     borderRadius: radii.md,
     zIndex: 50,
-    shadowColor: '#000',
-    shadowOpacity: 0.15,
-    shadowRadius: 8,
-    elevation: 4,
+    borderWidth: 2,
+    borderColor: '#C9A227',
   },
   text: {
     fontFamily: fonts.bodyExtra,

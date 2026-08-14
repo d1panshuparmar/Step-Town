@@ -8,12 +8,14 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Body, PrimaryButton, Screen, SecondaryButton, Title } from '@/components/ui';
 import { fonts, palette, radii, spacing } from '@/constants/theme';
 import { useAuthStore } from '@/store/authStore';
 
 export default function LoginScreen() {
+  const insets = useSafeAreaInsets();
   const signIn = useAuthStore((s) => s.signIn);
   const loading = useAuthStore((s) => s.loading);
   const [email, setEmail] = useState('');
@@ -63,8 +65,19 @@ export default function LoginScreen() {
             onPress={onSubmit}
             disabled={loading}
           />
-          <SecondaryButton label="Create account" onPress={() => router.replace('/(auth)/signup')} />
+          <SecondaryButton
+            label="Create account"
+            onPress={() => router.replace('/(auth)/signup')}
+          />
         </View>
+
+        <Text
+          style={[
+            styles.credit,
+            { marginBottom: Math.max(insets.bottom, 8) },
+          ]}>
+          made by d1panshuparmar
+        </Text>
       </KeyboardAvoidingView>
     </Screen>
   );
@@ -72,7 +85,7 @@ export default function LoginScreen() {
 
 const styles = StyleSheet.create({
   wrap: { flex: 1, gap: spacing.md, paddingTop: spacing.md },
-  form: { gap: 10, marginTop: spacing.md },
+  form: { gap: 10, marginTop: spacing.md, flexGrow: 1 },
   label: {
     fontFamily: fonts.bodyBold,
     color: palette.inkMuted,
@@ -93,5 +106,14 @@ const styles = StyleSheet.create({
     fontFamily: fonts.bodyBold,
     color: palette.danger,
     fontSize: 13,
+  },
+  credit: {
+    marginTop: 'auto',
+    textAlign: 'center',
+    fontFamily: fonts.bodyBold,
+    fontSize: 13,
+    color: palette.ink,
+    opacity: 0.7,
+    letterSpacing: 0.2,
   },
 });
