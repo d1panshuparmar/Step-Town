@@ -15,50 +15,78 @@ import { TownGrid } from '@/components/TownGrid';
 import { TownHUD } from '@/components/TownHUD';
 import { palette } from '@/constants/theme';
 
+/** Township-inspired sky + rolling hills behind the isometric town */
 export default function TownScreen() {
   const insets = useSafeAreaInsets();
   const drift = useSharedValue(0);
   const sunPulse = useSharedValue(1);
+  const bird = useSharedValue(0);
 
   useEffect(() => {
     drift.value = withRepeat(
-      withTiming(1, { duration: 12000, easing: Easing.inOut(Easing.sin) }),
+      withTiming(1, { duration: 14000, easing: Easing.inOut(Easing.sin) }),
       -1,
       true
     );
     sunPulse.value = withRepeat(
-      withTiming(1.08, { duration: 2800, easing: Easing.inOut(Easing.sin) }),
+      withTiming(1.1, { duration: 3200, easing: Easing.inOut(Easing.sin) }),
       -1,
       true
     );
-  }, [drift, sunPulse]);
+    bird.value = withRepeat(
+      withTiming(1, { duration: 9000, easing: Easing.linear }),
+      -1,
+      false
+    );
+  }, [drift, sunPulse, bird]);
 
   const cloudA = useAnimatedStyle(() => ({
-    transform: [{ translateX: drift.value * 48 }],
+    transform: [{ translateX: drift.value * 56 }],
   }));
   const cloudB = useAnimatedStyle(() => ({
-    transform: [{ translateX: -drift.value * 36 }],
+    transform: [{ translateX: -drift.value * 40 }],
+  }));
+  const cloudC = useAnimatedStyle(() => ({
+    transform: [{ translateX: drift.value * 28 }],
   }));
   const sunStyle = useAnimatedStyle(() => ({
     transform: [{ scale: sunPulse.value }],
+  }));
+  const birdStyle = useAnimatedStyle(() => ({
+    transform: [{ translateX: bird.value * 220 - 40 }],
+    opacity: 0.75,
   }));
 
   return (
     <View style={[styles.root, { paddingTop: insets.top + 4 }]}>
       <LinearGradient
-        colors={['#6EC6E6', '#A8DFF0', '#C8E89A', '#7CB342']}
-        locations={[0, 0.35, 0.62, 1]}
+        colors={['#5EB8E8', '#8ED4F2', '#B8E8A0', '#6FBF4A', '#4F9E32']}
+        locations={[0, 0.28, 0.55, 0.78, 1]}
         style={StyleSheet.absoluteFill}
       />
       <Animated.Text style={[styles.sun, sunStyle]}>☀️</Animated.Text>
-      <Animated.Text style={[styles.cloud, cloudA, { top: 58, left: 12 }]}>
+      <Animated.Text style={[styles.cloud, cloudA, { top: 54, left: 8 }]}>
         ☁️
       </Animated.Text>
-      <Animated.Text style={[styles.cloud, cloudB, { top: 96, right: 24 }]}>
+      <Animated.Text style={[styles.cloud, cloudB, { top: 88, right: 18 }]}>
         ☁️
       </Animated.Text>
-      <View style={styles.hillBack} />
-      <View style={styles.hillFront} />
+      <Animated.Text
+        style={[styles.cloudSmall, cloudC, { top: 118, left: '38%' }]}>
+        ☁️
+      </Animated.Text>
+      <Animated.Text style={[styles.bird, birdStyle]}>🕊️</Animated.Text>
+
+      <View style={styles.hillFar} />
+      <View style={styles.hillMid} />
+      <View style={styles.hillNear} />
+      <View style={styles.treeLeft}>
+        <Text style={styles.treeEmoji}>🌲</Text>
+      </View>
+      <View style={styles.treeRight}>
+        <Text style={styles.treeEmoji}>🌳</Text>
+      </View>
+
       <TownHUD />
       <TownGrid />
       <CoinToast />
@@ -73,35 +101,70 @@ const styles = StyleSheet.create({
   },
   sun: {
     position: 'absolute',
-    top: 52,
-    right: 28,
-    fontSize: 40,
+    top: 48,
+    right: 26,
+    fontSize: 44,
   },
   cloud: {
     position: 'absolute',
-    fontSize: 36,
-    opacity: 0.92,
+    fontSize: 38,
+    opacity: 0.95,
   },
-  hillBack: {
+  cloudSmall: {
     position: 'absolute',
-    left: -60,
-    right: -20,
-    top: '34%',
-    height: 130,
-    backgroundColor: '#6FAE4E',
-    borderTopLeftRadius: 180,
-    borderTopRightRadius: 140,
-    opacity: 0.55,
+    fontSize: 26,
+    opacity: 0.85,
   },
-  hillFront: {
+  bird: {
     position: 'absolute',
-    left: -30,
-    right: -70,
-    top: '40%',
+    top: 72,
+    left: 0,
+    fontSize: 16,
+  },
+  hillFar: {
+    position: 'absolute',
+    left: -80,
+    right: -40,
+    top: '30%',
+    height: 120,
+    backgroundColor: '#7BC45A',
+    borderTopLeftRadius: 200,
+    borderTopRightRadius: 160,
+    opacity: 0.45,
+  },
+  hillMid: {
+    position: 'absolute',
+    left: -50,
+    right: -90,
+    top: '36%',
     height: 140,
-    backgroundColor: '#8FBF66',
-    borderTopLeftRadius: 120,
-    borderTopRightRadius: 180,
+    backgroundColor: '#69B348',
+    borderTopLeftRadius: 140,
+    borderTopRightRadius: 200,
     opacity: 0.5,
   },
+  hillNear: {
+    position: 'absolute',
+    left: -30,
+    right: -20,
+    top: '44%',
+    height: 160,
+    backgroundColor: '#5AA338',
+    borderTopLeftRadius: 100,
+    borderTopRightRadius: 120,
+    opacity: 0.35,
+  },
+  treeLeft: {
+    position: 'absolute',
+    left: 6,
+    top: '38%',
+    opacity: 0.85,
+  },
+  treeRight: {
+    position: 'absolute',
+    right: 10,
+    top: '41%',
+    opacity: 0.8,
+  },
+  treeEmoji: { fontSize: 28 },
 });

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
@@ -14,14 +14,21 @@ import { fonts, palette, radii, spacing } from '@/constants/theme';
 import { formatDuration } from '@/lib/date';
 import type { FriendTownSnapshot, Plot } from '@/lib/types';
 
-const TILE = 58;
-const GAP = 5;
+const TILE_W = 72;
+const TILE_H = 40;
+
+function isoPos(x: number, y: number) {
+  return {
+    left: (x - y) * (TILE_W / 2),
+    top: (x + y) * (TILE_H / 2),
+  };
+}
 
 export function FriendTownView({ snapshot }: { snapshot: FriendTownSnapshot }) {
   const { width, height } = useWindowDimensions();
   const [, setTick] = useState(0);
   const translateX = useSharedValue(0);
-  const translateY = useSharedValue(12);
+  const translateY = useSharedValue(20);
   const startX = useSharedValue(0);
   const startY = useSharedValue(0);
   const scale = useSharedValue(1);
@@ -32,9 +39,18 @@ export function FriendTownView({ snapshot }: { snapshot: FriendTownSnapshot }) {
     return () => clearInterval(id);
   }, []);
 
-  const boardSize = GRID_SIZE * (TILE + GAP) + GAP;
-  const clampX = Math.max(40, boardSize * 0.35);
-  const clampY = Math.max(40, boardSize * 0.35);
+  const sorted = useMemo(
+    () =>
+      [...snapshot.plots].sort(
+        (a, b) => a.x + a.y - (b.x + b.y) || a.x - b.x
+      ),
+    [snapshot.plots]
+  );
+
+  const boardW = GRID_SIZE * TILE_W;
+  const boardH = GRID_SIZE * TILE_H;
+  const clampX = boardW * 0.5;
+  const clampY = boardH * 0.4;
 
   const pan = Gesture.Pan()
     .averageTouches(true)
@@ -50,12 +66,12 @@ export function FriendTownView({ snapshot }: { snapshot: FriendTownSnapshot }) {
       translateX.value = withDecay({
         velocity: e.velocityX * 0.8,
         clamp: [-clampX, clampX],
-        deceleration: 0.998,
+        deceleration: 0.997,
       });
       translateY.value = withDecay({
         velocity: e.velocityY * 0.8,
         clamp: [-clampY, clampY],
-        deceleration: 0.998,
+        deceleration: 0.997,
       });
     });
 
@@ -64,10 +80,10 @@ export function FriendTownView({ snapshot }: { snapshot: FriendTownSnapshot }) {
       savedScale.value = scale.value;
     })
     .onUpdate((e) => {
-      scale.value = clamp(savedScale.value * e.scale, 0.75, 1.4);
+      scale.value = clamp(savedScale.value * e.scale, 0.72, 1.45);
     })
     .onEnd(() => {
-      scale.value = withSpring(clamp(scale.value, 0.8, 1.3), {
+      scale.value = withSpring(clamp(scale.value, 0.78, 1.3), {
         damping: 16,
         stiffness: 180,
       });
@@ -90,14 +106,13 @@ export function FriendTownView({ snapshot }: { snapshot: FriendTownSnapshot }) {
           style={[
             styles.board,
             {
-              width: boardSize,
-              height: boardSize,
-              marginLeft: (width - spacing.sm * 2 - boardSize) / 2,
-              marginTop: 14,
+              width: boardW + TILE_W,
+              height: boardH + TILE_H * 3,
+              marginLeft: width / 2 - TILE_W / 2 - spacing.sm,
             },
             boardStyle,
           ]}>
-          {snapshot.plots.map((plot) => (
+          {sorted.map((plot) => (
             <ReadOnlyTile key={plot.id} plot={plot} />
           ))}
         </Animated.View>
@@ -109,6 +124,7 @@ export function FriendTownView({ snapshot }: { snapshot: FriendTownSnapshot }) {
 
 function ReadOnlyTile({ plot }: { plot: Plot }) {
   const now = Date.now();
+  const pos = isoPos(plot.x, plot.y);
   let emoji = '';
   let label = '';
   let ready = false;
@@ -136,19 +152,26 @@ function ReadOnlyTile({ plot }: { plot: Plot }) {
   return (
     <View
       style={[
-        styles.tile,
-        {
-          left: GAP + plot.x * (TILE + GAP),
-          top: GAP + plot.y * (TILE + GAP),
-        },
-        !plot.unlocked && styles.tileLocked,
-        plot.unlocked && plot.kind === 'empty' && styles.tileGrass,
-        soil && styles.tileSoil,
-        ready && styles.tileReady,
+        styles.tileWrap,
+        { left: pos.left, top: pos.top, zIndex: plot.x + plot.y },
       ]}>
-      {!!emoji && <Text style={styles.tileEmoji}>{emoji}</Text>}
-      {!plot.unlocked && <Text style={styles.lockIcon}>🌫️</Text>}
-      {!!label && <Text style={styles.tileLabel}>{label}</Text>}
+      <View
+        style={[
+          styles.diamond,
+          !plot.unlocked && styles.diamondLocked,
+          plot.unlocked && plot.kind === 'empty' && styles.diamondGrass,
+          soil && styles.diamondSoil,
+          ready && styles.diamondReady,
+        ]}
+      />
+      <View style={styles.tileFace}>
+        {!!emoji && <Text style={styles.tileEmoji}>{emoji}</Text>}
+        {!plot.unlocked && <Text style={styles.lockIcon}>🌫️</Text>}
+        {plot.unlocked && plot.kind === 'empty' && !emoji && (
+          <Text style={styles.grassTuft}>🌿</Text>
+        )}
+        {!!label && <Text style={styles.tileLabel}>{label}</Text>}
+      </View>
     </View>
   );
 }
@@ -157,10 +180,10 @@ const styles = StyleSheet.create({
   viewport: {
     overflow: 'hidden',
     marginHorizontal: spacing.sm,
-    borderRadius: radii.lg,
+    borderRadius: 18,
     borderWidth: 3,
-    borderColor: '#5D3A1A',
-    backgroundColor: '#5A9E45',
+    borderColor: '#6B4423',
+    backgroundColor: '#5FAF45',
   },
   board: { position: 'relative' },
   hint: {
@@ -169,36 +192,60 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     textAlign: 'center',
-    fontFamily: fonts.body,
+    fontFamily: fonts.bodyBold,
     fontSize: 11,
-    color: 'rgba(255,255,255,0.85)',
+    color: 'rgba(255,255,255,0.9)',
   },
-  tile: {
+  tileWrap: {
     position: 'absolute',
-    width: TILE,
-    height: TILE,
-    borderRadius: 12,
-    backgroundColor: '#7CB342',
-    borderWidth: 2,
-    borderColor: 'rgba(44,36,22,0.2)',
+    width: TILE_W,
+    height: TILE_H + 34,
     alignItems: 'center',
-    justifyContent: 'center',
-    gap: 2,
   },
-  tileGrass: { backgroundColor: '#8BC34A' },
-  tileSoil: { backgroundColor: '#A67C52', borderColor: '#7A5A3A' },
-  tileLocked: { backgroundColor: '#9AAA88', opacity: 0.92 },
-  tileReady: { backgroundColor: '#FFD54F', borderColor: '#F9A825' },
-  tileEmoji: { fontSize: 24 },
+  diamond: {
+    position: 'absolute',
+    top: 10,
+    width: TILE_W - 10,
+    height: TILE_W - 10,
+    backgroundColor: '#7AC943',
+    transform: [{ rotate: '45deg' }, { scaleY: 0.55 }],
+    borderRadius: 8,
+    borderWidth: 2,
+    borderColor: 'rgba(60, 40, 15, 0.22)',
+  },
+  diamondGrass: {
+    backgroundColor: '#8EDB52',
+    borderColor: '#5AA32E',
+  },
+  diamondSoil: {
+    backgroundColor: '#C49A6C',
+    borderColor: '#8B6844',
+  },
+  diamondLocked: {
+    backgroundColor: '#A8B89A',
+    opacity: 0.88,
+  },
+  diamondReady: {
+    backgroundColor: '#FFD54F',
+    borderColor: '#F0A020',
+  },
+  tileFace: {
+    marginTop: 12,
+    alignItems: 'center',
+    zIndex: 2,
+  },
+  tileEmoji: { fontSize: 26 },
+  grassTuft: { fontSize: 12, opacity: 0.85 },
   lockIcon: { fontSize: 16 },
   tileLabel: {
     fontFamily: fonts.bodyExtra,
     fontSize: 9,
     color: palette.ink,
-    backgroundColor: 'rgba(255,246,232,0.95)',
-    paddingHorizontal: 4,
+    backgroundColor: 'rgba(255,248,230,0.95)',
+    paddingHorizontal: 5,
     paddingVertical: 1,
     borderRadius: 5,
     overflow: 'hidden',
+    marginTop: 2,
   },
 });

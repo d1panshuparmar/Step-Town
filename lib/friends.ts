@@ -13,6 +13,13 @@ import type {
 const PROFILES_KEY = 'stepwize-profiles-v1';
 const FRIENDSHIPS_KEY = 'stepwize-friendships-v1';
 const SNAPSHOTS_KEY = 'stepwize-friend-snapshots-v1';
+/** Local code → profile (+ optional snapshot) so 6-letter add works on-device */
+const DIRECTORY_KEY = 'stepwize-friend-directory-v1';
+
+type DirectoryEntry = {
+  profile: FriendProfile;
+  snapshot?: FriendTownSnapshot;
+};
 
 export type FriendListItem = {
   friendshipId: string;
@@ -111,6 +118,46 @@ async function readLocalSnapshots(): Promise<Record<string, FriendTownSnapshot>>
 
 async function writeLocalSnapshots(map: Record<string, FriendTownSnapshot>) {
   await AsyncStorage.setItem(SNAPSHOTS_KEY, JSON.stringify(map));
+}
+
+async function readLocalDirectory(): Promise<Record<string, DirectoryEntry>> {
+  const raw = await AsyncStorage.getItem(DIRECTORY_KEY);
+  if (!raw) return {};
+  try {
+    return JSON.parse(raw) as Record<string, DirectoryEntry>;
+  } catch {
+    return {};
+  }
+}
+
+async function writeLocalDirectory(map: Record<string, DirectoryEntry>) {
+  await AsyncStorage.setItem(DIRECTORY_KEY, JSON.stringify(map));
+}
+
+async function publishDirectoryEntry(
+  profile: FriendProfile,
+  snapshot?: FriendTownSnapshot
+): Promise<void> {
+  const code = profile.friendCode.toUpperCase();
+  const dir = await readLocalDirectory();
+  dir[code] = { profile, snapshot: snapshot ?? dir[code]?.snapshot };
+  await writeLocalDirectory(dir);
+
+  if (!isSupabaseConfigured) return;
+  try {
+    const supabase = getSupabase()!;
+    await supabase.from('friend_directory').upsert({
+      friend_code: code,
+      user_id: profile.id,
+      display_name: profile.displayName,
+      town_name: profile.townName,
+      email: profile.email,
+      snapshot: snapshot ?? null,
+      updated_at: new Date().toISOString(),
+    });
+  } catch {
+    /* table may not exist yet — local directory still works */
+  }
 }
 
 export type FriendInvitePayload = {
@@ -225,73 +272,46 @@ async function upsertLocalFriendLink(
   await writeLocalFriendships(list);
 }
 
-/** Instant-add by short code or pasted STEPWIZE invite (no account switching). */
+/** Instant-add with the 6-letter friend code only. */
 export async function addFriendEasy(
   myUserId: string,
   paste: string
 ): Promise<{ ok: boolean; message: string }> {
   const text = paste.trim();
-  if (!text) return { ok: false, message: 'Paste a friend code or invite.' };
+  if (!text) return { ok: false, message: 'Enter their 6-letter friend code.' };
 
+  // Legacy invites still work if someone pastes an old share, but UI only asks for codes.
   const invite = parseFriendInvite(text);
   if (invite) {
     if (invite.profile.id === myUserId) {
-      return { ok: false, message: "That's your own invite." };
+      return { ok: false, message: "That's your own code." };
     }
     await upsertLocalFriendLink(myUserId, invite.profile, invite.snapshot);
-
-    if (isSupabaseConfigured) {
-      try {
-        const supabase = getSupabase()!;
-        const { data: existing } = await supabase
-          .from('friendships')
-          .select('*')
-          .or(
-            `and(requester_id.eq.${myUserId},addressee_id.eq.${invite.profile.id}),and(requester_id.eq.${invite.profile.id},addressee_id.eq.${myUserId})`
-          )
-          .maybeSingle();
-        if (!existing) {
-          await supabase.from('friendships').insert({
-            requester_id: myUserId,
-            addressee_id: invite.profile.id,
-            status: 'accepted',
-          });
-        } else if (existing.status !== 'accepted') {
-          await supabase
-            .from('friendships')
-            .update({ status: 'accepted' })
-            .eq('id', existing.id);
-        }
-      } catch {
-        /* local friend still works */
-      }
-    }
-
+    await publishDirectoryEntry(invite.profile, invite.snapshot);
     return {
       ok: true,
-      message: `Added ${invite.profile.displayName || invite.snapshot.townName}. Their town & steps are ready.`,
+      message: `Added ${invite.profile.displayName || invite.snapshot.townName}.`,
     };
   }
 
   const code = extractFriendCode(text);
-  if (!code) {
+  if (!code || !/^[A-Z0-9]{6}$/.test(code)) {
     return {
       ok: false,
-      message:
-        'Paste their 6-letter code, or the full invite they shared from Friends.',
+      message: 'Enter their 6-letter friend code (letters & numbers).',
     };
   }
 
-  // Prefer cloud lookup so you never need their account on your phone
-  const target = await findProfileByFriendCode(code);
-  if (!target) {
+  const found = await lookupByFriendCode(code);
+  if (!found) {
     return {
       ok: false,
       message: isSupabaseConfigured
-        ? 'No player found with that code yet. Ask them to open Friends once, then share again.'
-        : 'Ask them to tap Share invite in Friends, then paste the whole message here (code alone needs cloud).',
+        ? 'No player found with that code. Ask them to open Friends once so their code goes live.'
+        : 'No player found with that code on this phone. They need to open Friends first (or set up cloud for codes across phones).',
     };
   }
+  const { profile: target, snapshot } = found;
   if (target.id === myUserId) {
     return { ok: false, message: "That's your own code." };
   }
@@ -307,7 +327,7 @@ export async function addFriendEasy(
       .maybeSingle();
 
     if (existing?.status === 'accepted') {
-      await upsertLocalFriendLink(myUserId, target);
+      await upsertLocalFriendLink(myUserId, target, snapshot);
       return { ok: false, message: 'Already friends.' };
     }
     if (existing) {
@@ -325,25 +345,23 @@ export async function addFriendEasy(
       if (error) return { ok: false, message: error.message };
     }
 
-    // Cache their public snapshot locally for instant town view
-    const { data: snapRow } = await supabase
-      .from('friend_snapshots')
-      .select('snapshot')
-      .eq('user_id', target.id)
-      .maybeSingle();
-    await upsertLocalFriendLink(
-      myUserId,
-      target,
-      (snapRow?.snapshot as FriendTownSnapshot) ?? undefined
-    );
+    let snap = snapshot;
+    if (!snap) {
+      const { data: snapRow } = await supabase
+        .from('friend_snapshots')
+        .select('snapshot')
+        .eq('user_id', target.id)
+        .maybeSingle();
+      snap = (snapRow?.snapshot as FriendTownSnapshot) ?? undefined;
+    }
+    await upsertLocalFriendLink(myUserId, target, snap);
     return {
       ok: true,
       message: `Added ${target.displayName}. Tap them to see steps & town.`,
     };
   }
 
-  // Local-only short code: only works if their profile already exists on this phone
-  await upsertLocalFriendLink(myUserId, target);
+  await upsertLocalFriendLink(myUserId, target, snapshot);
   return {
     ok: true,
     message: `Added ${target.displayName}.`,
@@ -388,13 +406,15 @@ export async function ensureMyProfile(input: {
         .select('*')
         .single();
       if (error) throw error;
-      return {
+      const profile: FriendProfile = {
         id: data.id,
         email: data.email,
         friendCode: data.friend_code,
         townName: data.town_name,
         displayName: data.display_name,
       };
+      await publishDirectoryEntry(profile).catch(() => undefined);
+      return profile;
     }
 
     const { data, error } = await supabase
@@ -409,13 +429,15 @@ export async function ensureMyProfile(input: {
       .select('*')
       .single();
     if (error) throw error;
-    return {
+    const profile: FriendProfile = {
       id: data.id,
       email: data.email,
       friendCode: data.friend_code,
       townName: data.town_name,
       displayName: data.display_name,
     };
+    await publishDirectoryEntry(profile).catch(() => undefined);
+    return profile;
   }
 
   const map = await readLocalProfiles();
@@ -429,12 +451,21 @@ export async function ensureMyProfile(input: {
   };
   map[input.userId] = profile;
   await writeLocalProfiles(map);
+  await publishDirectoryEntry(profile);
   return profile;
 }
 
 export async function publishFriendSnapshot(
   snapshot: FriendTownSnapshot
 ): Promise<void> {
+  const profile: FriendProfile = {
+    id: snapshot.userId,
+    email: snapshot.email,
+    friendCode: snapshot.friendCode,
+    townName: snapshot.townName,
+    displayName: snapshot.email?.split('@')[0] || snapshot.townName || 'Player',
+  };
+
   if (isSupabaseConfigured) {
     const supabase = getSupabase()!;
     const { error } = await supabase.from('friend_snapshots').upsert({
@@ -443,22 +474,45 @@ export async function publishFriendSnapshot(
       updated_at: new Date().toISOString(),
     });
     if (error) throw error;
+    await publishDirectoryEntry(profile, snapshot);
     return;
   }
 
   const map = await readLocalSnapshots();
   map[snapshot.userId] = snapshot;
   await writeLocalSnapshots(map);
+
+  const profiles = await readLocalProfiles();
+  const existing = profiles[snapshot.userId];
+  await publishDirectoryEntry(existing ?? profile, snapshot);
 }
 
-export async function findProfileByFriendCode(
+export async function lookupByFriendCode(
   code: string
-): Promise<FriendProfile | null> {
+): Promise<DirectoryEntry | null> {
   const normalized = code.trim().toUpperCase();
   if (!normalized) return null;
 
   if (isSupabaseConfigured) {
     const supabase = getSupabase()!;
+    const { data: dir } = await supabase
+      .from('friend_directory')
+      .select('*')
+      .eq('friend_code', normalized)
+      .maybeSingle();
+    if (dir) {
+      return {
+        profile: {
+          id: dir.user_id,
+          email: dir.email ?? '',
+          friendCode: dir.friend_code,
+          townName: dir.town_name ?? 'Town',
+          displayName: dir.display_name ?? 'Player',
+        },
+        snapshot: (dir.snapshot as FriendTownSnapshot) ?? undefined,
+      };
+    }
+
     const { data, error } = await supabase
       .from('profiles')
       .select('*')
@@ -467,18 +521,32 @@ export async function findProfileByFriendCode(
     if (error) throw error;
     if (!data) return null;
     return {
-      id: data.id,
-      email: data.email,
-      friendCode: data.friend_code,
-      townName: data.town_name,
-      displayName: data.display_name,
+      profile: {
+        id: data.id,
+        email: data.email,
+        friendCode: data.friend_code,
+        townName: data.town_name,
+        displayName: data.display_name,
+      },
     };
   }
 
+  const dir = await readLocalDirectory();
+  if (dir[normalized]) return dir[normalized];
+
   const map = await readLocalProfiles();
-  return (
-    Object.values(map).find((p) => p.friendCode === normalized) ?? null
-  );
+  const profile =
+    Object.values(map).find((p) => p.friendCode === normalized) ?? null;
+  if (!profile) return null;
+  const snaps = await readLocalSnapshots();
+  return { profile, snapshot: snaps[profile.id] };
+}
+
+export async function findProfileByFriendCode(
+  code: string
+): Promise<FriendProfile | null> {
+  const found = await lookupByFriendCode(code);
+  return found?.profile ?? null;
 }
 
 export async function acceptFriendRequest(

@@ -25,7 +25,6 @@ import { fonts, palette, radii, spacing } from '@/constants/theme';
 import { formatNumber } from '@/lib/date';
 import {
   addFriendEasy,
-  buildFriendInvite,
   ensureMyProfile,
   listFriends,
   publishFriendSnapshot,
@@ -42,7 +41,6 @@ export default function FriendsScreen() {
   const user = useAuthStore((s) => s.user);
   const townName = useGameStore((s) => s.player.townName);
   const [myCode, setMyCode] = useState('');
-  const [inviteToken, setInviteToken] = useState('');
   const [codeInput, setCodeInput] = useState('');
   const [friends, setFriends] = useState<FriendListItem[]>([]);
   const [loading, setLoading] = useState(false);
@@ -66,7 +64,6 @@ export default function FriendsScreen() {
         payload
       );
       await publishFriendSnapshot(snapshot);
-      setInviteToken(buildFriendInvite({ v: 1, profile, snapshot }));
       const list = await listFriends(user.id);
       setFriends(list.filter((f) => f.status === 'accepted'));
     } catch (e) {
@@ -93,31 +90,25 @@ export default function FriendsScreen() {
           <RefreshControl refreshing={loading} onRefresh={() => void reload()} />
         }>
         <Title>Friends</Title>
-        <Subtitle>Add by code — no logging into their account</Subtitle>
+        <Subtitle>Just the 6-letter code — that's all you need</Subtitle>
 
         <Panel style={styles.block}>
           <Text style={styles.section}>Your friend code</Text>
           <Text style={styles.code}>{myCode || '······'}</Text>
           <Body muted>
-            Share your invite. Friends paste it on their phone and instantly see
-            your steps & town.
-            {isSupabaseConfigured
-              ? ' Cloud sync keeps progress updated.'
-              : ' Without cloud, share the full invite (not just the code).'}
+            Share only this code. Friends type it below to add you and see your
+            steps & town.
+            {!isSupabaseConfigured
+              ? ' Tip: cloud (Supabase) lets codes work across phones.'
+              : ''}
           </Body>
           <View style={styles.rowBtns}>
             <PrimaryButton
-              label="Share invite"
-              disabled={!myCode || !inviteToken}
+              label="Share code"
+              disabled={!myCode}
               onPress={() => {
                 void Share.share({
-                  message: [
-                    'Add me on Stepwize!',
-                    `Friend code: ${myCode}`,
-                    '',
-                    'Paste this whole message in Friends → Add a friend:',
-                    inviteToken,
-                  ].join('\n'),
+                  message: `Add me on Stepwize! My friend code is ${myCode}`,
                 });
               }}
             />
@@ -127,23 +118,22 @@ export default function FriendsScreen() {
 
         <Panel style={styles.block}>
           <Text style={styles.section}>Add a friend</Text>
-          <Body muted>
-            Paste their friend code, or the full invite they shared. No accept
-            step — they are added right away.
-          </Body>
+          <Body muted>Type their 6-letter friend code. No long invite needed.</Body>
           <TextInput
             value={codeInput}
-            onChangeText={setCodeInput}
-            placeholder="Code or paste invite"
+            onChangeText={(t) =>
+              setCodeInput(t.replace(/[^a-zA-Z0-9]/g, '').slice(0, 6).toUpperCase())
+            }
+            placeholder="ABCDEF"
             placeholderTextColor={palette.inkMuted}
             autoCapitalize="characters"
             autoCorrect={false}
-            multiline
+            maxLength={6}
             style={styles.input}
           />
           <PrimaryButton
             label={busy ? 'Adding…' : 'Add friend'}
-            disabled={busy || codeInput.trim().length < 4}
+            disabled={busy || codeInput.trim().length !== 6}
             onPress={async () => {
               if (!user) return;
               setBusy(true);
@@ -165,7 +155,7 @@ export default function FriendsScreen() {
           <Text style={styles.section}>Your friends</Text>
           {friends.length === 0 ? (
             <Body muted>
-              No friends yet — ask them to Share invite, then paste it above.
+              No friends yet — share your code, or enter theirs above.
             </Body>
           ) : (
             friends.map((f) => (
@@ -215,8 +205,8 @@ const styles = StyleSheet.create({
   },
   code: {
     fontFamily: fonts.display,
-    fontSize: 36,
-    letterSpacing: 4,
+    fontSize: 40,
+    letterSpacing: 6,
     color: palette.wood,
     textAlign: 'center',
   },
@@ -225,14 +215,13 @@ const styles = StyleSheet.create({
     borderColor: palette.woodLight,
     borderRadius: radii.md,
     paddingHorizontal: 14,
-    paddingVertical: 12,
-    fontFamily: fonts.bodyBold,
-    fontSize: 15,
-    letterSpacing: 0.5,
+    paddingVertical: 14,
+    fontFamily: fonts.display,
+    fontSize: 28,
+    letterSpacing: 6,
     color: palette.ink,
     backgroundColor: '#FFF8EC',
-    minHeight: 52,
-    textAlignVertical: 'top',
+    textAlign: 'center',
   },
   rowBtns: { gap: 8 },
   friendCard: {
