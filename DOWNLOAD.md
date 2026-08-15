@@ -2,14 +2,14 @@
 
 ## Latest build (v1.0.5) — Township town + short friend codes
 
-**APK download:** _(building — link will be updated when EAS finishes)_
+**APK download:** https://expo.dev/artifacts/eas/qXPx0i_ZCuLouYIzrmLl3jZMyrsbyngmhylzsJKptiU.apk
 
-**Build page:** _(pending)_
+**Build page:** https://expo.dev/accounts/d1panshuparmar/projects/stepwize/builds/a5b596bf-5d6c-47d1-b375-6a04fe341bd1
 
 ### What’s new
 - Township-style isometric town (sky, hills, diamond plots)
 - Add friends with **only the 6-letter code** (no long invite)
-- Friend-code directory for cross-phone lookup (run updated `supabase/schema.sql`)
+- Friend-code directory for cross-phone lookup (run `supabase/friend_directory.sql` / full `schema.sql`)
 
 ### Tips for Android
 - Allow **Physical activity**
