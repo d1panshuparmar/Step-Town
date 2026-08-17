@@ -1,23 +1,14 @@
 # Download Stepwize (Android APK)
 
-## Latest build (v1.0.5) — Township town + short friend codes
+## Latest build (v1.0.11) — Township-style visual rebuild
 
-**APK download:** https://expo.dev/artifacts/eas/qXPx0i_ZCuLouYIzrmLl3jZMyrsbyngmhylzsJKptiU.apk
+**APK:** https://expo.dev/artifacts/eas/0lWwrrULrQVAHUDIKUCjLz8jpsDd3-wVa4JZIzqNfgk.apk
 
-**Build page:** https://expo.dev/accounts/d1panshuparmar/projects/stepwize/builds/a5b596bf-5d6c-47d1-b375-6a04fe341bd1
+**Build page:** https://expo.dev/accounts/d1panshuparmar/projects/stepwize/builds/449522a1-fb36-43fd-9fab-6fca5c1124a9
 
-### What’s new
-- Township-style isometric town (sky, hills, diamond plots)
-- Add friends with **only the 6-letter code** (no long invite)
-- Friend-code directory for cross-phone lookup (run `supabase/friend_directory.sql` / full `schema.sql`)
-
-### Tips for Android
-- Allow **Physical activity**
-- Don’t force-stop Stepwize
-- Open the app once after walking to credit coins if sync is delayed
-
----
-
-## Previous (v1.0.4) — all-day step tracking
-
-**APK download:** https://expo.dev/artifacts/eas/NNgzBmjvg_X_3tqTflgTyt1uua3sVTdGDq4chEkDe98.apk
+### Visual rebuild
+- Continuous lush meadow (roads, pond, trees, fences) — no unlock diamond grid
+- Detailed cartoon houses / barn / bakery / factory sprites
+- Populated starter town (house, barn, decor, farm plots)
+- Playrix-style floating HUD + glossy dock
+- Soft edge mist only for expansion

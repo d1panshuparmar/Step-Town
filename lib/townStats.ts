@@ -1,12 +1,19 @@
-import { BASE_WAREHOUSE, BUILDINGS } from '@/constants/catalog';
+import { BASE_WAREHOUSE, BARN_LEVEL_BONUS, BUILDINGS } from '@/constants/catalog';
+import { ZOO_ANIMALS } from '@/lib/townshipExtras';
 import type { ItemId, Plot } from '@/lib/types';
 
-export function inventoryUsed(inventory: Record<ItemId, number>): number {
-  return (Object.values(inventory) as number[]).reduce((a, b) => a + b, 0);
+export function inventoryUsed(
+  inventory: Partial<Record<ItemId, number>> | Record<string, number> | undefined
+): number {
+  if (!inventory) return 0;
+  return Object.values(inventory).reduce(
+    (a, b) => a + (typeof b === 'number' && Number.isFinite(b) ? b : 0),
+    0
+  );
 }
 
-export function warehouseCapacity(plots: Plot[]): number {
-  let bonus = 0;
+export function warehouseCapacity(plots: Plot[], barnLevel = 0): number {
+  let bonus = barnLevel * BARN_LEVEL_BONUS;
   for (const p of plots) {
     if (p.kind === 'building' && p.buildingId) {
       bonus += BUILDINGS[p.buildingId]?.storageBonus ?? 0;
@@ -25,12 +32,16 @@ export function townPopulation(plots: Plot[]): number {
   return pop;
 }
 
-export function townHappiness(plots: Plot[]): number {
+export function townHappiness(plots: Plot[], zooOwned: string[] = []): number {
   let happy = 0;
   for (const p of plots) {
     if (p.kind === 'building' && p.buildingId) {
       happy += BUILDINGS[p.buildingId]?.happiness ?? 0;
     }
+  }
+  for (const id of zooOwned) {
+    const a = ZOO_ANIMALS.find((z) => z.id === id);
+    happy += a?.happiness ?? 0;
   }
   return happy;
 }

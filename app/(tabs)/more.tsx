@@ -1,13 +1,17 @@
 import { useRouter } from 'expo-router';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { Body, Screen, Subtitle, Title } from '@/components/ui';
+import { Screen, Title } from '@/components/ui';
 import { fonts, palette, radii, spacing } from '@/constants/theme';
 
 const LINKS = [
-  { href: '/(tabs)/goals', title: 'Goals', emoji: '🎁', blurb: 'Daily walk & town rewards' },
-  { href: '/(tabs)/friends', title: 'Friends', emoji: '👯', blurb: 'Codes, steps, visit towns' },
-  { href: '/(tabs)/achievements', title: 'Badges', emoji: '🏆', blurb: 'Milestones & account' },
+  { href: '/(tabs)/quests', title: 'Quests & Events', emoji: '📜' },
+  { href: '/(tabs)/goals', title: 'Daily Goals', emoji: '🎁' },
+  { href: '/(tabs)/market', title: 'Market', emoji: '🏪' },
+  { href: '/(tabs)/club', title: 'Clubs', emoji: '🤝' },
+  { href: '/(tabs)/friends', title: 'Friends', emoji: '👯' },
+  { href: '/(tabs)/achievements', title: 'Badges', emoji: '🏆' },
+  { href: '/(tabs)/settings', title: 'Settings', emoji: '⚙️' },
 ] as const;
 
 export default function MoreScreen() {
@@ -16,7 +20,6 @@ export default function MoreScreen() {
   return (
     <Screen>
       <Title>More</Title>
-      <Subtitle>Extra pages without crowding the town</Subtitle>
 
       <View style={styles.list}>
         {LINKS.map((item) => (
@@ -25,10 +28,7 @@ export default function MoreScreen() {
             style={({ pressed }) => [styles.card, pressed && { opacity: 0.9 }]}
             onPress={() => router.push(item.href as never)}>
             <Text style={styles.emoji}>{item.emoji}</Text>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.name}>{item.title}</Text>
-              <Body muted>{item.blurb}</Body>
-            </View>
+            <Text style={styles.name}>{item.title}</Text>
             <Text style={styles.chevron}>›</Text>
           </Pressable>
         ))}
@@ -53,6 +53,7 @@ const styles = StyleSheet.create({
   },
   emoji: { fontSize: 28 },
   name: {
+    flex: 1,
     fontFamily: fonts.bodyExtra,
     fontSize: 17,
     color: palette.ink,

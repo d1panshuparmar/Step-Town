@@ -2,13 +2,48 @@ export type ItemId =
   | 'wheat'
   | 'corn'
   | 'carrot'
+  | 'tomato'
+  | 'sugarcane'
+  | 'potato'
+  | 'cotton'
+  | 'strawberry'
+  | 'rice'
+  | 'pumpkin'
+  | 'apple'
   | 'bread'
   | 'feed'
   | 'egg'
   | 'milk'
-  | 'ore';
+  | 'sugar'
+  | 'juice'
+  | 'ore'
+  | 'cheese'
+  | 'butter'
+  | 'cream'
+  | 'cookies'
+  | 'cake'
+  | 'jam'
+  | 'cloth'
+  | 'wool'
+  | 'honey'
+  | 'fish'
+  | 'wood'
+  | 'clay'
+  | 'iron'
+  | 'coal';
 
-export type CropId = 'wheat' | 'corn' | 'carrot';
+export type CropId =
+  | 'wheat'
+  | 'corn'
+  | 'carrot'
+  | 'tomato'
+  | 'sugarcane'
+  | 'potato'
+  | 'cotton'
+  | 'strawberry'
+  | 'rice'
+  | 'pumpkin'
+  | 'apple';
 
 export type BuildingId =
   | 'house'
@@ -17,9 +52,25 @@ export type BuildingId =
   | 'feed_mill'
   | 'chicken_coop'
   | 'dairy'
+  | 'sugar_mill'
+  | 'juice_plant'
   | 'flower_bed'
   | 'well'
-  | 'park';
+  | 'park'
+  | 'statue'
+  | 'apartment'
+  | 'cafe'
+  | 'school'
+  | 'textile_mill'
+  | 'pigsty'
+  | 'sheep_pen'
+  | 'beehive'
+  | 'road'
+  | 'fountain'
+  | 'lamp'
+  | 'fence'
+  | 'market'
+  | 'hospital';
 
 export type PlotKind = 'empty' | 'crop' | 'building';
 
@@ -32,7 +83,13 @@ export type AchievementId =
   | 'expand_land'
   | 'bake_bread'
   | 'first_mine'
-  | 'coop_eggs';
+  | 'coop_eggs'
+  | 'farmer_100'
+  | 'builder_10'
+  | 'entrepreneur'
+  | 'industrialist'
+  | 'socialite'
+  | 'angler';
 
 export interface CropDef {
   id: CropId;
@@ -45,6 +102,18 @@ export interface CropDef {
   unlockLevel: number;
 }
 
+export interface FactoryRecipe {
+  id: string;
+  input: ItemId;
+  inputQty: number;
+  /** Optional second ingredient (e.g. cookies = wheat + sugar) */
+  input2?: ItemId;
+  input2Qty?: number;
+  output: ItemId;
+  outputQty: number;
+  processMs: number;
+}
+
 export interface BuildingDef {
   id: BuildingId;
   name: string;
@@ -52,11 +121,17 @@ export interface BuildingDef {
   description: string;
   cost: number;
   unlockLevel: number;
-  kind: 'home' | 'factory' | 'decor' | 'storage';
+  kind: 'home' | 'factory' | 'decor' | 'storage' | 'road' | 'service';
   unique?: boolean;
   population?: number;
   happiness?: number;
   storageBonus?: number;
+  minPopulation?: number;
+  /** Township-style production slots */
+  queueSlots?: number;
+  shelfSlots?: number;
+  recipes?: FactoryRecipe[];
+  /** @deprecated single recipe — prefer recipes[] */
   recipe?: {
     input: ItemId;
     inputQty: number;
@@ -65,6 +140,20 @@ export interface BuildingDef {
     processMs: number;
   };
 }
+
+/** One job cooking in a factory */
+export type FactoryJob = {
+  recipeId: string;
+  output: ItemId;
+  outputQty: number;
+  readyAt: number;
+};
+
+/** Finished goods waiting on the factory shelf */
+export type FactoryShelfItem = {
+  itemId: ItemId;
+  qty: number;
+};
 
 export interface Plot {
   id: string;
@@ -78,8 +167,11 @@ export interface Plot {
   buildingId?: BuildingId;
   plantedAt?: number;
   readyAt?: number;
+  /** Legacy single-slot — migrated into factoryQueue */
   processing?: boolean;
   processReadyAt?: number;
+  factoryQueue?: FactoryJob[];
+  factoryShelf?: FactoryShelfItem[];
 }
 
 export interface OrderRequirement {
@@ -150,6 +242,18 @@ export interface Player {
   todayDate: string;
   mineEnergySpent: number;
   lastMineAt: number | null;
+  /** Barn upgrade level (Township storage bottleneck) */
+  barnLevel: number;
+  /** Calendar date of last daily reward claim (YYYY-MM-DD) */
+  lastDailyClaimDate: string | null;
+  dailyClaimStreak: number;
+  /** Epoch ms — used for offline welcome summary */
+  lastSeenAt: number;
+  fishCaught: number;
+  eventTokens: number;
+  eventProgress: number;
+  eventId: string | null;
+  eventClaimed: boolean;
 }
 
 export interface GameState {
@@ -162,10 +266,31 @@ export interface GameState {
   achievements: Achievement[];
   visitor: VisitorEvent | null;
   selectedShopItem: BuildingId | CropId | null;
-  placeMode: 'none' | 'building' | 'crop' | 'expand';
+  placeMode: 'none' | 'building' | 'crop' | 'expand' | 'move' | 'sell';
+  /** Plot id when relocating a building */
+  moveFromPlotId: string | null;
+  materials: Record<string, number>;
+  trains: import('@/lib/townshipExtras').TrainCar[];
+  airport: import('@/lib/townshipExtras').AirportBoard | null;
+  zooOwned: string[];
+  /** Academy levels per factory building id */
+  academyLevels: Record<string, number>;
   lastCoinToast: number;
   hydrated: boolean;
   dirtyAt: number;
+  /** Informational lines shown once after returning from offline */
+  offlineWelcome: string[] | null;
+  quests: import('@/lib/quests').QuestProgress[];
+  settings: import('@/lib/settings').GameSettings;
+  club: import('@/lib/clubs').ClubState | null;
+  tutorialDone: boolean;
+  stats: {
+    harvests: number;
+    orders: number;
+    produced: number;
+    buildings: number;
+    coinsEarned: number;
+  };
 }
 
 export type CloudSavePayload = {
@@ -177,6 +302,21 @@ export type CloudSavePayload = {
   ledger: StepLedgerDay[];
   achievements: Achievement[];
   visitor: VisitorEvent | null;
+  materials?: Record<string, number>;
+  trains?: import('@/lib/townshipExtras').TrainCar[];
+  airport?: import('@/lib/townshipExtras').AirportBoard | null;
+  zooOwned?: string[];
+  academyLevels?: Record<string, number>;
+  /** Mirrored on player; kept for older clients / explicit cloud fields */
+  lastDailyClaimDate?: string | null;
+  dailyClaimStreak?: number;
+  lastSeenAt?: number;
+  fishCaught?: number;
+  quests?: import('@/lib/quests').QuestProgress[];
+  settings?: import('@/lib/settings').GameSettings;
+  club?: import('@/lib/clubs').ClubState | null;
+  tutorialDone?: boolean;
+  stats?: GameState['stats'];
   savedAt: number;
 };
 

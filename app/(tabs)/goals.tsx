@@ -5,7 +5,6 @@ import {
   Panel,
   PrimaryButton,
   Screen,
-  Subtitle,
   Title,
 } from '@/components/ui';
 import { fonts, palette, radii, spacing } from '@/constants/theme';
@@ -21,15 +20,11 @@ export default function GoalsScreen() {
     <Screen>
       <ScrollView contentContainerStyle={styles.content}>
         <Title>Daily goals</Title>
-        <Subtitle>Chest rewards reset each day</Subtitle>
 
         <Panel style={styles.streak}>
           <Text style={styles.streakEmoji}>🔥</Text>
           <View style={{ flex: 1 }}>
             <Text style={styles.streakTitle}>{player.streak}-day streak</Text>
-            <Body muted>
-              Walk enough each day to keep the coin bonus climbing.
-            </Body>
           </View>
         </Panel>
 
@@ -64,8 +59,7 @@ export default function GoalsScreen() {
 
         {allClaimed && (
           <Panel>
-            <Text style={styles.name}>Town chest cleared</Text>
-            <Body muted>Come back tomorrow for a fresh set of goals.</Body>
+            <Text style={styles.name}>All claimed</Text>
           </Panel>
         )}
       </ScrollView>

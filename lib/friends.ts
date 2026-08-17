@@ -376,6 +376,19 @@ export async function sendFriendRequest(
   return addFriendEasy(myUserId, friendCode);
 }
 
+function normalizeFriendCode(raw: unknown, fallback: string): string {
+  const code = typeof raw === 'string' ? raw.trim().toUpperCase() : '';
+  return code.length === 6 ? code : fallback;
+}
+
+async function saveLocalProfile(profile: FriendProfile): Promise<FriendProfile> {
+  const map = await readLocalProfiles();
+  map[profile.id] = profile;
+  await writeLocalProfiles(map);
+  await publishDirectoryEntry(profile).catch(() => undefined);
+  return profile;
+}
+
 export async function ensureMyProfile(input: {
   userId: string;
   email: string;
@@ -385,74 +398,88 @@ export async function ensureMyProfile(input: {
   const displayName = input.email.split('@')[0] || 'Player';
   const townName = input.townName || 'My Town';
 
-  if (isSupabaseConfigured) {
-    const supabase = getSupabase()!;
-    const { data: existing } = await supabase
-      .from('profiles')
-      .select('*')
-      .eq('id', input.userId)
-      .maybeSingle();
+  const localFallback = async (): Promise<FriendProfile> => {
+    const map = await readLocalProfiles();
+    const prev = map[input.userId];
+    return saveLocalProfile({
+      id: input.userId,
+      email: input.email,
+      friendCode: normalizeFriendCode(prev?.friendCode, friendCode),
+      townName,
+      displayName: prev?.displayName ?? displayName,
+    });
+  };
 
-    if (existing) {
+  if (isSupabaseConfigured) {
+    try {
+      const supabase = getSupabase()!;
+      const { data: existing, error: fetchError } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', input.userId)
+        .maybeSingle();
+      if (fetchError) throw fetchError;
+
+      if (existing) {
+        const code = normalizeFriendCode(existing.friend_code, friendCode);
+        const existingCode =
+          typeof existing.friend_code === 'string'
+            ? existing.friend_code.trim()
+            : '';
+        const needsCodeWrite = existingCode.length !== 6;
+        const { data, error } = await supabase
+          .from('profiles')
+          .update({
+            email: input.email,
+            town_name: townName,
+            display_name: existing.display_name || displayName,
+            ...(needsCodeWrite ? { friend_code: code } : {}),
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', input.userId)
+          .select('*')
+          .single();
+        if (error) throw error;
+        const profile: FriendProfile = {
+          id: data.id,
+          email: data.email,
+          friendCode: normalizeFriendCode(data.friend_code, code),
+          townName: data.town_name,
+          displayName: data.display_name,
+        };
+        await publishDirectoryEntry(profile).catch(() => undefined);
+        await saveLocalProfile(profile);
+        return profile;
+      }
+
       const { data, error } = await supabase
         .from('profiles')
-        .update({
+        .insert({
+          id: input.userId,
           email: input.email,
+          friend_code: friendCode,
+          display_name: displayName,
           town_name: townName,
-          display_name: existing.display_name || displayName,
-          updated_at: new Date().toISOString(),
         })
-        .eq('id', input.userId)
         .select('*')
         .single();
       if (error) throw error;
       const profile: FriendProfile = {
         id: data.id,
         email: data.email,
-        friendCode: data.friend_code,
+        friendCode: normalizeFriendCode(data.friend_code, friendCode),
         townName: data.town_name,
         displayName: data.display_name,
       };
       await publishDirectoryEntry(profile).catch(() => undefined);
+      await saveLocalProfile(profile);
       return profile;
+    } catch {
+      return localFallback();
     }
-
-    const { data, error } = await supabase
-      .from('profiles')
-      .insert({
-        id: input.userId,
-        email: input.email,
-        friend_code: friendCode,
-        display_name: displayName,
-        town_name: townName,
-      })
-      .select('*')
-      .single();
-    if (error) throw error;
-    const profile: FriendProfile = {
-      id: data.id,
-      email: data.email,
-      friendCode: data.friend_code,
-      townName: data.town_name,
-      displayName: data.display_name,
-    };
-    await publishDirectoryEntry(profile).catch(() => undefined);
-    return profile;
   }
 
-  const map = await readLocalProfiles();
-  const prev = map[input.userId];
-  const profile: FriendProfile = {
-    id: input.userId,
-    email: input.email,
-    friendCode: prev?.friendCode ?? friendCode,
-    townName,
-    displayName: prev?.displayName ?? displayName,
-  };
-  map[input.userId] = profile;
-  await writeLocalProfiles(map);
-  await publishDirectoryEntry(profile);
-  return profile;
+  return localFallback();
 }
 
 export async function publishFriendSnapshot(

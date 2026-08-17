@@ -8,7 +8,6 @@ import {
   PrimaryButton,
   Screen,
   SecondaryButton,
-  Subtitle,
   Title,
 } from '@/components/ui';
 import {
@@ -30,9 +29,7 @@ export default function StepsScreen() {
     available,
     permission,
     listening,
-    historySupported,
     backgroundSync,
-    message,
     error,
     refresh,
     platform,
@@ -49,7 +46,6 @@ export default function StepsScreen() {
     <Screen>
       <ScrollView contentContainerStyle={styles.content}>
         <Title>Steps</Title>
-        <Subtitle>Walk anytime — steps sync in the background</Subtitle>
 
         <LinearGradient
           colors={['#2E7D4F', '#1B5E3A']}
@@ -64,9 +60,9 @@ export default function StepsScreen() {
             <Text style={styles.liveText}>
               {listening
                 ? backgroundSync
-                  ? 'Tracking all day'
-                  : 'Counting live'
-                : 'Not counting'}
+                  ? 'Tracking'
+                  : 'Live'
+                : 'Off'}
             </Text>
           </View>
           <Text style={styles.bigNumber}>{formatNumber(shownSteps)}</Text>
@@ -79,40 +75,18 @@ export default function StepsScreen() {
         </LinearGradient>
 
         <Panel style={styles.block}>
-          <Text style={styles.section}>Pedometer</Text>
-          <Body muted>
-            {error ??
-              message ??
-              (listening
-                ? 'Your phone keeps counting steps. Open Stepwize anytime to sync coins.'
-                : 'Waiting for sensor…')}
-          </Body>
-          {listening && backgroundSync && (
-            <Body muted>
-              Background sync is on. Android may delay sync until you reopen the
-              app or the system wakes Stepwize — steps are not lost.
-            </Body>
-          )}
-          {listening && !historySupported && platform === 'android' && !backgroundSync && (
-            <Body muted>
-              Android counts while Step-Town is open. Keep the app in the
-              foreground when walking.
-            </Body>
-          )}
+          {error ? <Body muted>{error}</Body> : null}
           {permission === false && (
-            <Body>
-              Open system settings → Apps → Step-Town → Permissions → Physical
-              activity → Allow.
-            </Body>
+            <Body>Allow Physical activity permission in system settings.</Body>
           )}
           {lastGain > 0 && (
-            <Body>Last credit +{lastGain} Step Coins.</Body>
+            <Body>+{lastGain} coins</Body>
           )}
           <View style={styles.actions}>
             <PrimaryButton
               label={
                 permission === false
-                  ? 'Request permission again'
+                  ? 'Request permission'
                   : 'Restart step counter'
               }
               onPress={async () => {
@@ -138,14 +112,12 @@ export default function StepsScreen() {
         <Panel style={styles.block}>
           <Text style={styles.section}>Economy</Text>
           <Body muted>
-            {STEPS_PER_COIN} steps ≈ 1 coin. Full rate to{' '}
-            {formatNumber(FULL_RATE_STEP_CAP)} steps/day, then soft taper. Hit{' '}
-            {formatNumber(WALK_GOAL_STEPS)} for streak bonus.
+            {STEPS_PER_COIN} steps = 1 coin · cap {formatNumber(FULL_RATE_STEP_CAP)} · streak {formatNumber(WALK_GOAL_STEPS)}
           </Body>
           {todayLedger && (
             <Body>
-              Converted today: {formatNumber(todayLedger.convertedCoins)} coins
-              {todayLedger.cappedFlag ? ' · taper active' : ''}
+              Today: {formatNumber(todayLedger.convertedCoins)} coins
+              {todayLedger.cappedFlag ? ' · taper' : ''}
             </Body>
           )}
         </Panel>

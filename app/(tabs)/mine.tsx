@@ -1,12 +1,10 @@
-import { Alert, StyleSheet, Text, View } from 'react-native';
+import { Alert, StyleSheet, Text } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 
 import {
-  Body,
   Panel,
   PrimaryButton,
   Screen,
-  Subtitle,
   Title,
 } from '@/components/ui';
 import { MINE_ENERGY_PER_DIG } from '@/constants/catalog';
@@ -28,22 +26,14 @@ export default function MineScreen() {
         style={styles.hero}>
         <Text style={styles.pick}>⛏️</Text>
         <Text style={styles.heroTitle}>Step Mine</Text>
-        <Text style={styles.heroSub}>
-          Spend walk energy to dig ore, coins, and rare gems.
-        </Text>
       </LinearGradient>
 
       <Title>Mine</Title>
-      <Subtitle>Energy comes from today&apos;s steps</Subtitle>
 
       <Panel style={styles.block}>
         <Text style={styles.stat}>
-          Energy {formatNumber(energy)} / dig costs {MINE_ENERGY_PER_DIG}
+          Energy {formatNumber(energy)} · dig {MINE_ENERGY_PER_DIG} · ore {inventory.ore}
         </Text>
-        <Body muted>
-          Ore in warehouse: {inventory.ore}. Digging uses steps you already
-          walked — keep moving to refill.
-        </Body>
         <PrimaryButton
           label="Dig"
           onPress={() => {
@@ -72,12 +62,6 @@ const styles = StyleSheet.create({
     fontFamily: fonts.display,
     fontSize: 28,
     color: palette.cream,
-  },
-  heroSub: {
-    fontFamily: fonts.body,
-    fontSize: 14,
-    color: '#E8D9C0',
-    textAlign: 'center',
   },
   block: { gap: 12, marginTop: spacing.md },
   stat: {

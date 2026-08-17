@@ -9,6 +9,7 @@ import {
   useWindowDimensions,
 } from 'react-native';
 import * as Haptics from 'expo-haptics';
+import { router } from 'expo-router';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
   clamp,
@@ -21,16 +22,40 @@ import Animated, {
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { AirportBoard } from '@/components/AirportBoard';
+import { BalloonPopGame } from '@/components/BalloonPopGame';
+import { BarnSheet } from '@/components/BarnSheet';
+import { DailyRewardSheet } from '@/components/DailyRewardSheet';
+import { FactorySheet } from '@/components/FactorySheet';
+import { FishingSheet } from '@/components/FishingSheet';
+import { HelicopterPad } from '@/components/HelicopterPad';
+import {
+  BuildingShadow,
+  BuildingSprite,
+  FarmBed,
+  FogPatch,
+  SelectGlow,
+  TownMeadow,
+  TOWN_TILE,
+  buildingColors,
+} from '@/components/IsoBlock';
+import { TownLife } from '@/components/TownLife';
+import { TrainStation } from '@/components/TrainStation';
+import { TutorialCoach } from '@/components/TutorialCoach';
+import { AcademySheet, ZooSheet } from '@/components/ZooAcademySheets';
 import { Body, PrimaryButton, SecondaryButton } from '@/components/ui';
 import { BUILDINGS, CROPS, GRID_SIZE } from '@/constants/catalog';
 import { fonts, palette, radii, spacing } from '@/constants/theme';
+import type { DayPhase } from '@/lib/atmosphere';
 import { formatDuration } from '@/lib/date';
+import { cropGrowthStage } from '@/lib/offline';
+import { GEM_SPEEDUP_COST } from '@/lib/townshipExtras';
+import { townPopulation } from '@/lib/townStats';
 import type { BuildingId, CropId, Plot } from '@/lib/types';
 import { useGameStore } from '@/store/gameStore';
 
-/** Township-like isometric tile size */
-const TILE_W = 78;
-const TILE_H = 44;
+const TILE_W = TOWN_TILE.W;
+const TILE_H = TOWN_TILE.H;
 
 function isoPos(x: number, y: number) {
   return {
@@ -39,25 +64,64 @@ function isoPos(x: number, y: number) {
   };
 }
 
-export function TownGrid() {
+function isExpandEdge(plot: Plot, plots: Plot[]): boolean {
+  if (plot.unlocked) return false;
+  const dirs = [
+    [1, 0],
+    [-1, 0],
+    [0, 1],
+    [0, -1],
+  ];
+  return dirs.some(([dx, dy]) =>
+    plots.some(
+      (p) => p.unlocked && p.x === plot.x + dx && p.y === plot.y + dy
+    )
+  );
+}
+
+type Sheet =
+  | { type: 'plot'; plotId: string }
+  | { type: 'factory'; plotId: string }
+  | { type: 'barn' }
+  | { type: 'heli' }
+  | { type: 'train' }
+  | { type: 'airport' }
+  | { type: 'zoo' }
+  | { type: 'academy' }
+  | { type: 'daily' }
+  | { type: 'fish' }
+  | null;
+
+export function TownGrid({
+  atmospherePhase = 'day',
+}: {
+  atmospherePhase?: DayPhase;
+}) {
   const { width, height } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const plots = useGameStore((s) => s.plots);
   const placeMode = useGameStore((s) => s.placeMode);
   const selected = useGameStore((s) => s.selectedShopItem);
+  const moveFromPlotId = useGameStore((s) => s.moveFromPlotId);
   const visitor = useGameStore((s) => s.visitor);
   const unlockPlot = useGameStore((s) => s.unlockPlot);
   const placeBuilding = useGameStore((s) => s.placeBuilding);
   const plantCrop = useGameStore((s) => s.plantCrop);
   const harvestPlot = useGameStore((s) => s.harvestPlot);
-  const startFactory = useGameStore((s) => s.startFactory);
-  const collectFactory = useGameStore((s) => s.collectFactory);
   const setPlaceMode = useGameStore((s) => s.setPlaceMode);
+  const sellBuilding = useGameStore((s) => s.sellBuilding);
+  const beginMoveBuilding = useGameStore((s) => s.beginMoveBuilding);
+  const completeMoveBuilding = useGameStore((s) => s.completeMoveBuilding);
   const dismissVisitor = useGameStore((s) => s.dismissVisitor);
   const maybeSpawnVisitor = useGameStore((s) => s.maybeSpawnVisitor);
+  const reduceMotion = useGameStore((s) => s.settings.reduceMotion);
+  const sfx = useGameStore((s) => s.settings.sfx);
 
-  const [selectedPlotId, setSelectedPlotId] = useState<string | null>(null);
+  const townName = useGameStore((s) => s.player.townName);
+  const [sheet, setSheet] = useState<Sheet>(null);
+  const [miniGame, setMiniGame] = useState(false);
   const [, setTick] = useState(0);
+  const pop = townPopulation(plots);
 
   const translateX = useSharedValue(0);
   const translateY = useSharedValue(28);
@@ -86,7 +150,7 @@ export function TownGrid() {
   const boardH = GRID_SIZE * TILE_H;
   const clampX = boardW * 0.55;
   const clampY = boardH * 0.45;
-  const viewportH = Math.min(420, Math.max(280, height * 0.46));
+  const viewportH = Math.max(280, height - insets.top - 168);
 
   const pan = Gesture.Pan()
     .averageTouches(true)
@@ -134,10 +198,13 @@ export function TownGrid() {
     ],
   }));
 
-  const selectedPlot = plots.find((p) => p.id === selectedPlotId) ?? null;
+  const selectedPlot =
+    sheet?.type === 'plot' || sheet?.type === 'factory'
+      ? plots.find((p) => p.id === sheet.plotId) ?? null
+      : null;
 
   const handleTile = (plot: Plot) => {
-    void Haptics.selectionAsync().catch(() => undefined);
+    if (sfx) void Haptics.selectionAsync().catch(() => undefined);
     if (placeMode === 'expand' && !plot.unlocked) {
       const res = unlockPlot(plot.id);
       if (!res.ok) Alert.alert('Land', res.message);
@@ -153,16 +220,74 @@ export function TownGrid() {
       if (!res.ok) Alert.alert('Plant', res.message);
       return;
     }
-    setSelectedPlotId(plot.id);
+    if (placeMode === 'move') {
+      if (moveFromPlotId) {
+        const res = completeMoveBuilding(plot.id);
+        if (!res.ok) Alert.alert('Move', res.message);
+        return;
+      }
+      if (plot.kind === 'building' && plot.buildingId) {
+        const res = beginMoveBuilding(plot.id);
+        if (!res.ok) Alert.alert('Move', res.message);
+        return;
+      }
+      Alert.alert('Move', 'Tap a building');
+      return;
+    }
+    if (placeMode === 'sell') {
+      if (plot.kind === 'building' && plot.buildingId) {
+        Alert.alert(
+          'Sell?',
+          '~40% refund',
+          [
+            { text: 'Cancel', style: 'cancel' },
+            {
+              text: 'Sell',
+              style: 'destructive',
+              onPress: () => {
+                const res = sellBuilding(plot.id);
+                if (!res.ok) Alert.alert('Sell', res.message);
+              },
+            },
+          ]
+        );
+        return;
+      }
+      Alert.alert('Sell', 'Tap a building');
+      return;
+    }
+    if (
+      plot.unlocked &&
+      plot.kind === 'building' &&
+      plot.buildingId &&
+      BUILDINGS[plot.buildingId]?.kind === 'factory'
+    ) {
+      setSheet({ type: 'factory', plotId: plot.id });
+      return;
+    }
+    if (
+      plot.unlocked &&
+      plot.kind === 'building' &&
+      plot.buildingId === 'barn'
+    ) {
+      setSheet({ type: 'barn' });
+      return;
+    }
+    setSheet({ type: 'plot', plotId: plot.id });
   };
 
   return (
     <View style={styles.wrap}>
       {visitor?.active && visitor.expiresAt > Date.now() && (
         <View style={styles.visitorBanner}>
-          <Text style={styles.visitorText}>{visitor.message}</Text>
+          <Text style={styles.visitorText} numberOfLines={1}>
+            {visitor.message}
+          </Text>
+          <Pressable onPress={() => setSheet({ type: 'heli' })}>
+            <Text style={styles.cancel}>🚁</Text>
+          </Pressable>
           <Pressable onPress={dismissVisitor}>
-            <Text style={styles.cancel}>Dismiss</Text>
+            <Text style={styles.cancel}>✕</Text>
           </Pressable>
         </View>
       )}
@@ -171,10 +296,14 @@ export function TownGrid() {
         <View style={styles.modeBanner}>
           <Text style={styles.modeText}>
             {placeMode === 'expand'
-              ? 'Tap foggy land to expand your township'
+              ? 'Expand'
               : placeMode === 'crop'
-                ? `Plant ${CROPS[selected as string]?.name ?? ''}`
-                : `Place ${BUILDINGS[selected as string]?.name ?? ''}`}
+                ? 'Plant'
+                : placeMode === 'move'
+                  ? 'Move'
+                  : placeMode === 'sell'
+                    ? 'Sell'
+                    : 'Place'}
           </Text>
           <Pressable onPress={() => setPlaceMode('none')}>
             <Text style={styles.cancel}>Cancel</Text>
@@ -184,76 +313,159 @@ export function TownGrid() {
 
       <GestureDetector gesture={gesture}>
         <Animated.View style={[styles.viewport, { height: viewportH }]}>
-          <View style={styles.fieldWash} />
           <Animated.View
             style={[
               styles.board,
               {
                 width: boardW + TILE_W,
-                height: boardH + TILE_H * 3,
+                height: boardH + TILE_H * 4,
                 marginLeft: width / 2 - TILE_W / 2,
+                marginTop: 48,
               },
               boardStyle,
             ]}>
+            <TownMeadow />
+            <TownLife
+              phase={atmospherePhase}
+              reduceMotion={reduceMotion}
+              population={pop}
+            />
             {sortedPlots.map((plot) => (
               <IsoTile
                 key={plot.id}
                 plot={plot}
-                selected={selectedPlotId === plot.id}
+                plots={plots}
+                placeMode={placeMode}
+                selected={
+                  ((sheet?.type === 'plot' || sheet?.type === 'factory') &&
+                    sheet.plotId === plot.id) ||
+                  moveFromPlotId === plot.id
+                }
                 onPress={() => handleTile(plot)}
               />
             ))}
           </Animated.View>
-          <Text style={styles.hint}>Drag · pinch · tap a plot</Text>
         </Animated.View>
       </GestureDetector>
 
+      {/* Township-style bottom dock */}
+      <View
+        style={[styles.dock, { paddingBottom: Math.max(insets.bottom, 8) }]}>
+        <View style={styles.dockLeft}>
+          <DockBtn
+            emoji="👯"
+            onPress={() => router.push('/(tabs)/friends')}
+          />
+          <DockBtn
+            emoji="🎁"
+            tint="#F5A623"
+            onPress={() => setSheet({ type: 'daily' })}
+          />
+          <DockBtn
+            emoji="🎣"
+            tint="#5EC8E8"
+            onPress={() => setSheet({ type: 'fish' })}
+          />
+          <DockBtn
+            emoji="📜"
+            tint="#E07A3D"
+            onPress={() => router.push('/(tabs)/quests')}
+          />
+          <DockBtn emoji="🎈" tint="#E88AC8" onPress={() => setMiniGame(true)} />
+          <DockBtn
+            emoji="✥"
+            tint="#5ECF4A"
+            onPress={() => setPlaceMode('move')}
+          />
+        </View>
+        <View style={styles.welcomeSign}>
+          <Text style={styles.welcomeTitle} numberOfLines={1}>
+            {townName || 'My Town'}
+          </Text>
+        </View>
+        <View style={styles.dockRight}>
+          <DockBtn emoji="🚁" onPress={() => setSheet({ type: 'heli' })} />
+          <DockBtn emoji="🚂" onPress={() => setSheet({ type: 'train' })} />
+          <DockBtn emoji="🏚️" onPress={() => setSheet({ type: 'barn' })} />
+          <DockBtn
+            emoji="👷"
+            tint="#F5C542"
+            big
+            onPress={() => router.push('/(tabs)/shop')}
+          />
+        </View>
+      </View>
+
+      <TutorialCoach onOpenQuests={() => router.push('/(tabs)/quests')} />
+      <BalloonPopGame visible={miniGame} onClose={() => setMiniGame(false)} />
+
       <Modal
-        visible={!!selectedPlot}
+        visible={!!sheet}
         transparent
         animationType="slide"
-        onRequestClose={() => setSelectedPlotId(null)}>
-        <Pressable
-          style={styles.modalBackdrop}
-          onPress={() => setSelectedPlotId(null)}>
+        onRequestClose={() => setSheet(null)}>
+        <Pressable style={styles.modalBackdrop} onPress={() => setSheet(null)}>
           <Pressable
             style={[
               styles.sheet,
               { paddingBottom: Math.max(insets.bottom, 16) + 8 },
             ]}
             onPress={(e) => e.stopPropagation()}>
-            {selectedPlot && (
+            {sheet?.type === 'barn' && (
+              <BarnSheet onClose={() => setSheet(null)} />
+            )}
+            {sheet?.type === 'heli' && (
+              <HelicopterPad onClose={() => setSheet(null)} />
+            )}
+            {sheet?.type === 'train' && (
+              <TrainStation onClose={() => setSheet(null)} />
+            )}
+            {sheet?.type === 'airport' && (
+              <AirportBoard onClose={() => setSheet(null)} />
+            )}
+            {sheet?.type === 'zoo' && (
+              <ZooSheet onClose={() => setSheet(null)} />
+            )}
+            {sheet?.type === 'academy' && (
+              <AcademySheet onClose={() => setSheet(null)} />
+            )}
+            {sheet?.type === 'daily' && (
+              <DailyRewardSheet onClose={() => setSheet(null)} />
+            )}
+            {sheet?.type === 'fish' && (
+              <FishingSheet onClose={() => setSheet(null)} />
+            )}
+            {sheet?.type === 'factory' && selectedPlot && (
+              <FactorySheet
+                plot={selectedPlot}
+                onClose={() => setSheet(null)}
+              />
+            )}
+            {sheet?.type === 'plot' && selectedPlot && (
               <PlotSheet
                 plot={selectedPlot}
-                onClose={() => setSelectedPlotId(null)}
+                onClose={() => setSheet(null)}
                 onHarvest={() => {
                   const res = harvestPlot(selectedPlot.id);
-                  if (!res.ok) Alert.alert('Harvest', res.message);
-                  else {
+                  if (!res.ok) {
+                    Alert.alert('Harvest', res.message);
+                    if (res.message?.includes('Barn')) setSheet({ type: 'barn' });
+                  } else {
                     void Haptics.notificationAsync(
                       Haptics.NotificationFeedbackType.Success
                     ).catch(() => undefined);
-                    setSelectedPlotId(null);
-                  }
-                }}
-                onStart={() => {
-                  const res = startFactory(selectedPlot.id);
-                  if (!res.ok) Alert.alert('Factory', res.message);
-                }}
-                onCollect={() => {
-                  const res = collectFactory(selectedPlot.id);
-                  if (!res.ok) Alert.alert('Factory', res.message);
-                  else {
-                    void Haptics.notificationAsync(
-                      Haptics.NotificationFeedbackType.Success
-                    ).catch(() => undefined);
+                    setSheet(null);
                   }
                 }}
                 onUnlock={() => {
                   const res = unlockPlot(selectedPlot.id);
                   if (!res.ok) Alert.alert('Land', res.message);
-                  else setSelectedPlotId(null);
+                  else setSheet(null);
                 }}
+                onOpenFactory={() =>
+                  setSheet({ type: 'factory', plotId: selectedPlot.id })
+                }
+                onOpenBarn={() => setSheet({ type: 'barn' })}
               />
             )}
           </Pressable>
@@ -263,42 +475,95 @@ export function TownGrid() {
   );
 }
 
+function DockBtn({
+  emoji,
+  onPress,
+  tint,
+  big,
+}: {
+  emoji: string;
+  onPress: () => void;
+  tint?: string;
+  big?: boolean;
+}) {
+  return (
+    <Pressable
+      onPress={onPress}
+      style={[
+        styles.dockBtn,
+        big && styles.dockBtnBig,
+        tint ? { backgroundColor: tint } : null,
+      ]}>
+      <View style={styles.dockGloss} />
+      <Text style={[styles.dockEmoji, big && styles.dockEmojiBig]}>{emoji}</Text>
+    </Pressable>
+  );
+}
+
 function IsoTile({
   plot,
+  plots,
+  placeMode,
   selected,
   onPress,
 }: {
   plot: Plot;
+  plots: Plot[];
+  placeMode: string;
   selected: boolean;
   onPress: () => void;
 }) {
   const now = Date.now();
   const pos = isoPos(plot.x, plot.y);
   const bounce = useSharedValue(1);
+  const edge = isExpandEdge(plot, plots);
 
   let emoji = '';
   let label = '';
   let ready = false;
-  let soil = false;
+  let mode: 'empty' | 'crop' | 'building' | 'fog' | 'hidden' = 'empty';
+  let fogPrice: number | undefined;
 
   if (!plot.unlocked) {
-    label = `${plot.unlockCost}`;
+    // Only show mist on the town edge — distant locked land stays continuous meadow
+    if (edge || placeMode === 'expand') {
+      mode = 'fog';
+      fogPrice = plot.unlockCost;
+    } else {
+      mode = 'hidden';
+    }
   } else if (plot.kind === 'building' && plot.buildingId) {
-    emoji = BUILDINGS[plot.buildingId].emoji;
-    if (plot.processing && plot.processReadyAt) {
-      if (now >= plot.processReadyAt) {
-        label = 'Ready';
+    mode = 'building';
+    const def = BUILDINGS[plot.buildingId];
+    if (def?.kind === 'factory') {
+      const shelf = plot.factoryShelf ?? [];
+      const queue = plot.factoryQueue ?? [];
+      const readyJobs = queue.filter((j) => j.readyAt <= now);
+      if (shelf.length || readyJobs.length) {
+        label = 'Collect';
         ready = true;
-      } else label = formatDuration(plot.processReadyAt - now);
+        emoji = def.emoji ?? '🍞';
+      } else if (queue.length) {
+        const soon = Math.min(...queue.map((j) => j.readyAt));
+        label = formatDuration(soon - now);
+      }
     }
   } else if (plot.kind === 'crop' && plot.cropId && plot.readyAt) {
-    emoji = CROPS[plot.cropId].emoji;
-    soil = true;
+    emoji = CROPS[plot.cropId]?.emoji ?? '🌱';
+    mode = 'crop';
     if (now >= plot.readyAt) {
       label = 'Pick';
       ready = true;
     } else label = formatDuration(plot.readyAt - now);
   }
+
+  const colors = buildingColors(plot.buildingId);
+  const growthStage =
+    mode === 'crop'
+      ? cropGrowthStage(plot.plantedAt, plot.readyAt, now)
+      : 3;
+  const cropOpacity = ready ? 1 : growthStage === 1 ? 0.45 : growthStage === 2 ? 0.75 : 0.95;
+  const cropSize = ready ? 30 : growthStage === 1 ? 16 : growthStage === 2 ? 22 : 26;
 
   useEffect(() => {
     if (!ready) {
@@ -307,7 +572,7 @@ function IsoTile({
     }
     const loop = setInterval(() => {
       bounce.value = withSequence(
-        withSpring(1.1, { damping: 7, stiffness: 150 }),
+        withSpring(1.08, { damping: 7, stiffness: 150 }),
         withSpring(1, { damping: 9, stiffness: 160 })
       );
     }, 1500);
@@ -318,40 +583,114 @@ function IsoTile({
     transform: [{ scale: bounce.value }],
   }));
 
+  // Distant locked land: invisible (meadow shows through) but still hit-testable in expand
+  if (mode === 'hidden' && placeMode !== 'expand') {
+    return (
+      <View
+        style={[
+          styles.tileWrap,
+          {
+            left: pos.left,
+            top: pos.top,
+            zIndex: 0,
+            width: TILE_W,
+            height: TILE_H + 20,
+          },
+        ]}
+        pointerEvents="none"
+      />
+    );
+  }
+
   return (
     <Animated.View
       style={[
         styles.tileWrap,
-        { left: pos.left, top: pos.top, zIndex: plot.x + plot.y },
+        {
+          left: pos.left,
+          top: pos.top,
+          zIndex: plot.x + plot.y + (mode === 'building' ? 2 : 0),
+          width: TILE_W,
+          height: TILE_H + 56,
+        },
         anim,
       ]}>
       <Pressable
         onPress={() => {
           bounce.value = withSequence(
-            withSpring(0.9, { damping: 14, stiffness: 240 }),
+            withSpring(0.94, { damping: 14, stiffness: 240 }),
             withSpring(1, { damping: 11, stiffness: 180 })
           );
           onPress();
         }}
         style={styles.tileHit}>
-        <View style={styles.tileShadow} />
-        <View
-          style={[
-            styles.diamond,
-            !plot.unlocked && styles.diamondLocked,
-            plot.unlocked && plot.kind === 'empty' && styles.diamondGrass,
-            soil && styles.diamondSoil,
-            ready && styles.diamondReady,
-            selected && styles.diamondSelected,
-          ]}
-        />
+        {selected && mode !== 'fog' && (
+          <SelectGlow width={TILE_W - 8} height={TILE_H} />
+        )}
+
+        {mode === 'fog' && (
+          <FogPatch
+            width={TILE_W - 20}
+            height={TILE_H - 10}
+            selected={selected}
+            price={fogPrice}
+          />
+        )}
+
+        {mode === 'crop' && (
+          <FarmBed
+            width={TILE_W - 14}
+            height={TILE_H - 8}
+            ready={ready}
+            selected={selected}
+            uid={plot.id}
+          />
+        )}
+
+        {mode === 'building' && plot.buildingId && (
+          <>
+            <BuildingShadow width={80} />
+            <BuildingSprite
+              accent={colors.accent}
+              roof={colors.roof}
+              selected={selected}
+              uid={plot.id}
+              kind={plot.buildingId}
+            />
+          </>
+        )}
+
+        {/* Empty unlocked plots stay invisible — continuous meadow underneath */}
+
         <View style={styles.tileFace}>
-          {!!emoji && <Text style={styles.tileEmoji}>{emoji}</Text>}
-          {!plot.unlocked && <Text style={styles.lockIcon}>🌫️</Text>}
-          {plot.unlocked && plot.kind === 'empty' && !emoji && (
-            <Text style={styles.grassTuft}>🌿</Text>
+          {mode === 'crop' && !!emoji && (
+            <Text
+              style={[
+                styles.cropEmoji,
+                ready && styles.cropReady,
+                {
+                  opacity: cropOpacity,
+                  fontSize: cropSize,
+                },
+              ]}>
+              {emoji}
+            </Text>
           )}
-          {!!label && <Text style={styles.tileLabel}>{label}</Text>}
+          {mode === 'building' && ready && (
+            <View style={styles.labelReady}>
+              <Text style={styles.readyBubble}>{emoji || '✓'}</Text>
+            </View>
+          )}
+          {mode !== 'fog' && !!label && !ready && (
+            <View style={styles.labelPill}>
+              <Text style={styles.tileLabel}>{label}</Text>
+            </View>
+          )}
+          {mode === 'crop' && ready && (
+            <View style={styles.labelReady}>
+              <Text style={styles.readyBubble}>{emoji}</Text>
+            </View>
+          )}
         </View>
       </Pressable>
     </Animated.View>
@@ -362,23 +701,31 @@ function PlotSheet({
   plot,
   onClose,
   onHarvest,
-  onStart,
-  onCollect,
   onUnlock,
+  onOpenFactory,
+  onOpenBarn,
 }: {
   plot: Plot;
   onClose: () => void;
   onHarvest: () => void;
-  onStart: () => void;
-  onCollect: () => void;
   onUnlock: () => void;
+  onOpenFactory: () => void;
+  onOpenBarn: () => void;
 }) {
   const now = Date.now();
-  const inventory = useGameStore((s) => s.inventory);
+  const gems = useGameStore((s) => s.player.gems);
+  const gemSpeedUpCrop = useGameStore((s) => s.gemSpeedUpCrop);
+  const beginMoveBuilding = useGameStore((s) => s.beginMoveBuilding);
+  const sellBuilding = useGameStore((s) => s.sellBuilding);
 
-  let title = 'Empty plot';
-  let detail = 'Plant crops from the Shop, or place a building.';
+  let title = 'Empty';
+  let detail = '';
   let action: { label: string; onPress: () => void } | null = null;
+  const growing =
+    plot.kind === 'crop' &&
+    plot.cropId &&
+    plot.readyAt &&
+    now < plot.readyAt;
 
   if (!plot.unlocked) {
     title = 'Locked land';
@@ -386,30 +733,21 @@ function PlotSheet({
     action = { label: `Unlock · ${plot.unlockCost} 🪙`, onPress: onUnlock };
   } else if (plot.kind === 'crop' && plot.cropId && plot.readyAt) {
     const def = CROPS[plot.cropId];
-    title = def.name;
+    title = def?.name ?? 'Crop';
     if (now >= plot.readyAt) {
-      detail = `Ready · +${def.yieldQty} ${def.name}`;
+      detail = `Ready · +${def?.yieldQty ?? 0} ${def?.name ?? ''}`;
       action = { label: 'Harvest', onPress: onHarvest };
     } else {
       detail = `Growing · ${formatDuration(plot.readyAt - now)}`;
     }
   } else if (plot.kind === 'building' && plot.buildingId) {
     const def = BUILDINGS[plot.buildingId];
-    title = def.name;
-    detail = def.description;
-    if (def.recipe) {
-      const r = def.recipe;
-      if (plot.processing && plot.processReadyAt) {
-        if (now >= plot.processReadyAt) {
-          detail = 'Production ready!';
-          action = { label: 'Collect', onPress: onCollect };
-        } else {
-          detail = `Working · ${formatDuration(plot.processReadyAt - now)}`;
-        }
-      } else {
-        detail = `${r.inputQty} ${r.input} → ${r.outputQty} ${r.output} (have ${inventory[r.input]})`;
-        action = { label: 'Start', onPress: onStart };
-      }
+    title = def?.name ?? 'Building';
+    detail = def?.description ?? '';
+    if (def?.kind === 'factory') {
+      action = { label: 'Open factory', onPress: onOpenFactory };
+    } else if (def?.kind === 'storage') {
+      action = { label: 'Open barn', onPress: onOpenBarn };
     }
   }
 
@@ -421,12 +759,50 @@ function PlotSheet({
           <Text style={styles.cancelDark}>Close</Text>
         </Pressable>
       </View>
-      <Body muted>{detail}</Body>
+      {detail ? <Body muted>{detail}</Body> : null}
       <View style={styles.sheetActions}>
         {action ? (
           <PrimaryButton label={action.label} onPress={action.onPress} />
         ) : (
           <SecondaryButton label="Got it" onPress={onClose} />
+        )}
+        {growing && (
+          <PrimaryButton
+            label={`Speed up · ${GEM_SPEEDUP_COST}💎 (have ${gems})`}
+            onPress={() => {
+              const res = gemSpeedUpCrop(plot.id);
+              if (!res.ok) Alert.alert('Gems', res.message);
+            }}
+          />
+        )}
+        {plot.kind === 'building' && plot.buildingId && (
+          <>
+            <SecondaryButton
+              label="Move building"
+              onPress={() => {
+                const res = beginMoveBuilding(plot.id);
+                if (!res.ok) Alert.alert('Move', res.message);
+                else onClose();
+              }}
+            />
+            <SecondaryButton
+              label="Sell building (~40%)"
+              onPress={() => {
+                Alert.alert('Sell?', '~40% refund', [
+                  { text: 'Cancel', style: 'cancel' },
+                  {
+                    text: 'Sell',
+                    style: 'destructive',
+                    onPress: () => {
+                      const res = sellBuilding(plot.id);
+                      if (!res.ok) Alert.alert('Sell', res.message);
+                      else onClose();
+                    },
+                  },
+                ]);
+              }}
+            />
+          </>
         )}
       </View>
     </View>
@@ -434,44 +810,44 @@ function PlotSheet({
 }
 
 const styles = StyleSheet.create({
-  wrap: { flex: 1, marginTop: spacing.sm },
+  wrap: { flex: 1 },
   visitorBanner: {
-    marginHorizontal: spacing.md,
-    marginBottom: spacing.sm,
-    backgroundColor: '#E07A3D',
-    borderRadius: radii.md,
+    position: 'absolute',
+    top: 8,
+    left: 12,
+    right: 12,
+    zIndex: 15,
+    backgroundColor: 'rgba(224,122,61,0.95)',
+    borderRadius: 14,
     paddingHorizontal: 12,
-    paddingVertical: 10,
+    paddingVertical: 8,
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
     gap: 8,
-    borderWidth: 2,
-    borderColor: '#A85A28',
   },
   visitorText: {
     flex: 1,
     fontFamily: fonts.bodyBold,
     color: '#FFF8EC',
-    fontSize: 13,
+    fontSize: 12,
   },
   modeBanner: {
-    marginHorizontal: spacing.md,
-    marginBottom: spacing.sm,
-    backgroundColor: '#7A4E2D',
-    borderRadius: radii.md,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
+    position: 'absolute',
+    top: 8,
+    alignSelf: 'center',
+    zIndex: 15,
+    backgroundColor: 'rgba(40,40,40,0.75)',
+    borderRadius: 16,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    gap: 8,
+    gap: 12,
   },
   modeText: {
-    flex: 1,
-    fontFamily: fonts.bodyBold,
-    color: '#FFF8EC',
-    fontSize: 13,
+    fontFamily: fonts.bodyExtra,
+    color: '#FFF',
+    fontSize: 14,
   },
   cancel: {
     fontFamily: fonts.bodyBold,
@@ -484,105 +860,117 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
   viewport: {
+    flex: 1,
     overflow: 'hidden',
-    marginHorizontal: spacing.sm,
-    borderRadius: 20,
-    borderWidth: 3,
-    borderColor: '#6B4423',
-    backgroundColor: '#5FAF45',
-  },
-  fieldWash: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(40, 110, 35, 0.22)',
+    backgroundColor: 'transparent',
   },
   board: { position: 'relative' },
-  hint: {
+  dock: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    justifyContent: 'space-between',
+    paddingHorizontal: 10,
+    paddingTop: 6,
+    gap: 8,
+  },
+  dockLeft: { flexDirection: 'row', gap: 8, alignItems: 'center' },
+  dockRight: { flexDirection: 'row', gap: 8, alignItems: 'center' },
+  dockBtn: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    backgroundColor: 'rgba(255,255,255,0.95)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 3,
+    borderColor: '#FFF',
+    shadowColor: '#000',
+    shadowOpacity: 0.22,
+    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 5,
+    overflow: 'hidden',
+  },
+  dockBtnBig: {
+    width: 58,
+    height: 58,
+    borderRadius: 29,
+    borderColor: '#E0A820',
+  },
+  dockGloss: {
     position: 'absolute',
-    bottom: 8,
+    top: 3,
+    left: 6,
+    right: 6,
+    height: 14,
+    borderRadius: 10,
+    backgroundColor: 'rgba(255,255,255,0.45)',
+  },
+  dockEmoji: { fontSize: 22 },
+  dockEmojiBig: { fontSize: 26 },
+  welcomeSign: {
+    flex: 1,
+    maxWidth: 120,
+    backgroundColor: 'rgba(255,248,230,0.9)',
+    borderRadius: 10,
+    borderWidth: 2,
+    borderColor: '#C4A484',
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    marginBottom: 6,
+  },
+  welcomeTitle: {
+    fontFamily: fonts.bodyExtra,
+    fontSize: 11,
+    color: '#3D2914',
+    textAlign: 'center',
+  },
+  tileWrap: { position: 'absolute' },
+  tileHit: { alignItems: 'center', minHeight: TILE_H + 20 },
+  tileFace: {
+    position: 'absolute',
+    top: 0,
     left: 0,
     right: 0,
-    textAlign: 'center',
-    fontFamily: fonts.bodyBold,
-    fontSize: 11,
-    color: 'rgba(255,255,255,0.9)',
-    textShadowColor: 'rgba(0,0,0,0.25)',
-    textShadowRadius: 3,
-  },
-  tileWrap: {
-    position: 'absolute',
-    width: TILE_W,
-    height: TILE_H + 36,
-  },
-  tileHit: {
-    width: TILE_W,
-    height: TILE_H + 36,
     alignItems: 'center',
+    zIndex: 4,
   },
-  tileShadow: {
-    position: 'absolute',
-    top: 18,
-    width: TILE_W - 16,
-    height: TILE_W - 16,
-    backgroundColor: 'rgba(20, 50, 10, 0.28)',
-    transform: [{ rotate: '45deg' }, { scaleY: 0.55 }, { translateY: 5 }],
-    borderRadius: 8,
-  },
-  diamond: {
-    position: 'absolute',
-    top: 10,
-    width: TILE_W - 10,
-    height: TILE_W - 10,
-    backgroundColor: '#7AC943',
-    transform: [{ rotate: '45deg' }, { scaleY: 0.55 }],
-    borderRadius: 9,
-    borderWidth: 2,
-    borderColor: 'rgba(60, 40, 15, 0.22)',
-  },
-  diamondGrass: {
-    backgroundColor: '#8EDB52',
-    borderColor: '#5AA32E',
-  },
-  diamondSoil: {
-    backgroundColor: '#C49A6C',
-    borderColor: '#8B6844',
-  },
-  diamondLocked: {
-    backgroundColor: '#A8B89A',
-    opacity: 0.88,
-  },
-  diamondReady: {
-    backgroundColor: '#FFD54F',
-    borderColor: '#F0A020',
-  },
-  diamondSelected: {
-    borderColor: '#FFF59D',
-    borderWidth: 3,
-  },
-  tileFace: {
-    marginTop: 14,
-    alignItems: 'center',
-    zIndex: 2,
-  },
-  tileEmoji: {
-    fontSize: 30,
-    textShadowColor: 'rgba(0,0,0,0.22)',
+  cropEmoji: {
+    fontSize: 26,
+    marginTop: 6,
+    textShadowColor: 'rgba(0,0,0,0.2)',
     textShadowOffset: { width: 0, height: 1 },
     textShadowRadius: 2,
   },
-  grassTuft: { fontSize: 14, opacity: 0.85 },
-  lockIcon: { fontSize: 18 },
+  cropReady: { fontSize: 30 },
+  labelPill: {
+    marginTop: 2,
+    backgroundColor: 'rgba(255,255,255,0.92)',
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(0,0,0,0.08)',
+  },
+  labelReady: {
+    backgroundColor: '#FFF',
+    borderColor: '#5ECF4A',
+    borderWidth: 3,
+    borderRadius: 22,
+    paddingHorizontal: 6,
+    paddingVertical: 4,
+    marginTop: -4,
+    shadowColor: '#000',
+    shadowOpacity: 0.2,
+    shadowRadius: 3,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 4,
+  },
+  readyBubble: { fontSize: 22 },
   tileLabel: {
     fontFamily: fonts.bodyExtra,
     fontSize: 10,
     color: palette.ink,
-    backgroundColor: 'rgba(255,248,230,0.95)',
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 6,
-    overflow: 'hidden',
-    marginTop: 2,
-    borderWidth: 1,
-    borderColor: 'rgba(107,68,35,0.18)',
   },
   modalBackdrop: {
     flex: 1,
@@ -597,7 +985,7 @@ const styles = StyleSheet.create({
     paddingTop: spacing.md,
     borderWidth: 3,
     borderBottomWidth: 0,
-    borderColor: '#C4A484',
+    borderColor: '#8B5E3C',
   },
   sheetInner: { gap: 10 },
   sheetHeader: {
@@ -612,3 +1000,4 @@ const styles = StyleSheet.create({
   },
   sheetActions: { marginTop: 4, marginBottom: 4 },
 });
+

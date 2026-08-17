@@ -31,6 +31,7 @@ const StepSyncContext = createContext<StepSyncValue | null>(null);
 
 export function StepSyncProvider({ children }: { children: ReactNode }) {
   const syncSteps = useGameStore((s) => s.syncSteps);
+  const hydrated = useGameStore((s) => s.hydrated);
   const [available, setAvailable] = useState<boolean | null>(null);
   const [permission, setPermission] = useState<boolean | null>(null);
   const [listening, setListening] = useState(false);
@@ -46,6 +47,7 @@ export function StepSyncProvider({ children }: { children: ReactNode }) {
 
   const start = useCallback(async () => {
     if (startingRef.current) return lastGainRef.current;
+    if (!useGameStore.getState().hydrated) return lastGainRef.current;
     startingRef.current = true;
     try {
       stopRef.current?.();
@@ -76,12 +78,16 @@ export function StepSyncProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     void registerStepBackgroundTask();
+  }, []);
+
+  useEffect(() => {
+    if (!hydrated) return;
     void start();
     const sub = AppState.addEventListener('change', (state) => {
       if (state === 'active') {
         void start();
       } else if (state === 'background' || state === 'inactive') {
-        // Flush catch-up baseline while backgrounding
+        // Flush catch-up baseline while backgrounding so closed-app walks credit later
         void (async () => {
           const seed = useGameStore.getState().player.todaySteps;
           const total = await syncHardwareSteps(seed);
@@ -95,7 +101,7 @@ export function StepSyncProvider({ children }: { children: ReactNode }) {
       stopRef.current?.();
       stopRef.current = null;
     };
-  }, [start, syncSteps]);
+  }, [hydrated, start, syncSteps]);
 
   const value = useMemo<StepSyncValue>(
     () => ({

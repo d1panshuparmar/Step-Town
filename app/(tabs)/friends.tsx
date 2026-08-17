@@ -17,8 +17,6 @@ import {
   Panel,
   PrimaryButton,
   Screen,
-  SecondaryButton,
-  Subtitle,
   Title,
 } from '@/components/ui';
 import { fonts, palette, radii, spacing } from '@/constants/theme';
@@ -27,12 +25,12 @@ import {
   addFriendEasy,
   ensureMyProfile,
   listFriends,
+  makeFriendCode,
   publishFriendSnapshot,
   removeFriendship,
   snapshotFromSave,
   type FriendListItem,
 } from '@/lib/friends';
-import { isSupabaseConfigured } from '@/lib/supabase';
 import { useAuthStore } from '@/store/authStore';
 import { useGameStore } from '@/store/gameStore';
 
@@ -50,6 +48,12 @@ export default function FriendsScreen() {
     if (!user) return;
     setLoading(true);
     try {
+      const quickCode = await makeFriendCode(user.id, user.email);
+      setMyCode(quickCode);
+    } catch {
+      /* keep previous code if any */
+    }
+    try {
       const profile = await ensureMyProfile({
         userId: user.id,
         email: user.email,
@@ -66,11 +70,13 @@ export default function FriendsScreen() {
       await publishFriendSnapshot(snapshot);
       const list = await listFriends(user.id);
       setFriends(list.filter((f) => f.status === 'accepted'));
-    } catch (e) {
-      Alert.alert(
-        'Friends',
-        e instanceof Error ? e.message : 'Could not load friends.'
-      );
+    } catch {
+      try {
+        const code = await makeFriendCode(user.id, user.email);
+        setMyCode(code);
+      } catch {
+        /* ignore */
+      }
     } finally {
       setLoading(false);
     }
@@ -90,35 +96,23 @@ export default function FriendsScreen() {
           <RefreshControl refreshing={loading} onRefresh={() => void reload()} />
         }>
         <Title>Friends</Title>
-        <Subtitle>Just the 6-letter code — that's all you need</Subtitle>
 
         <Panel style={styles.block}>
-          <Text style={styles.section}>Your friend code</Text>
-          <Text style={styles.code}>{myCode || '······'}</Text>
-          <Body muted>
-            Share only this code. Friends type it below to add you and see your
-            steps & town.
-            {!isSupabaseConfigured
-              ? ' Tip: cloud (Supabase) lets codes work across phones.'
-              : ''}
-          </Body>
-          <View style={styles.rowBtns}>
-            <PrimaryButton
-              label="Share code"
-              disabled={!myCode}
-              onPress={() => {
-                void Share.share({
-                  message: `Add me on Stepwize! My friend code is ${myCode}`,
-                });
-              }}
-            />
-            <SecondaryButton label="Refresh" onPress={() => void reload()} />
-          </View>
+          <Text style={styles.section}>Your code</Text>
+          <Text style={styles.code}>{myCode || '…'}</Text>
+          <PrimaryButton
+            label="Share"
+            disabled={!myCode}
+            onPress={() => {
+              void Share.share({
+                message: `Add me on Stepwize! My friend code is ${myCode}`,
+              });
+            }}
+          />
         </Panel>
 
         <Panel style={styles.block}>
-          <Text style={styles.section}>Add a friend</Text>
-          <Body muted>Type their 6-letter friend code. No long invite needed.</Body>
+          <Text style={styles.section}>Add friend</Text>
           <TextInput
             value={codeInput}
             onChangeText={(t) =>
@@ -152,11 +146,8 @@ export default function FriendsScreen() {
         </Panel>
 
         <Panel style={styles.block}>
-          <Text style={styles.section}>Your friends</Text>
           {friends.length === 0 ? (
-            <Body muted>
-              No friends yet — share your code, or enter theirs above.
-            </Body>
+            <Body muted>No friends yet</Body>
           ) : (
             friends.map((f) => (
               <Pressable
@@ -170,7 +161,7 @@ export default function FriendsScreen() {
                 <View style={{ flex: 1 }}>
                   <Text style={styles.name}>{f.townName}</Text>
                   <Body muted>
-                    {f.displayName} · Lv {f.level} · 🔥 {f.streak} · {f.friendCode}
+                    {f.displayName} · Lv {f.level} · 🔥 {f.streak}
                   </Body>
                   <Text style={styles.steps}>
                     {formatNumber(f.todaySteps)} steps today
@@ -200,15 +191,17 @@ const styles = StyleSheet.create({
   block: { gap: 10 },
   section: {
     fontFamily: fonts.displaySoft,
-    fontSize: 18,
-    color: palette.ink,
+    fontSize: 16,
+    color: palette.inkMuted,
+    textAlign: 'center',
   },
   code: {
     fontFamily: fonts.display,
-    fontSize: 40,
-    letterSpacing: 6,
+    fontSize: 48,
+    letterSpacing: 8,
     color: palette.wood,
     textAlign: 'center',
+    fontWeight: '700',
   },
   input: {
     borderWidth: 2,
@@ -223,7 +216,6 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFF8EC',
     textAlign: 'center',
   },
-  rowBtns: { gap: 8 },
   friendCard: {
     flexDirection: 'row',
     alignItems: 'center',

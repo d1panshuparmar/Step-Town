@@ -9,13 +9,22 @@ import Animated, {
   withSpring,
 } from 'react-native-reanimated';
 
-import { BUILDINGS, CROPS, GRID_SIZE } from '@/constants/catalog';
-import { fonts, palette, radii, spacing } from '@/constants/theme';
+import {
+  BuildingShadow,
+  BuildingSprite,
+  FarmBed,
+  FogPatch,
+  TownMeadow,
+  TOWN_TILE,
+  buildingColors,
+} from '@/components/IsoBlock';
+import { CROPS, GRID_SIZE } from '@/constants/catalog';
+import { fonts, palette, spacing } from '@/constants/theme';
 import { formatDuration } from '@/lib/date';
 import type { FriendTownSnapshot, Plot } from '@/lib/types';
 
-const TILE_W = 72;
-const TILE_H = 40;
+const TILE_W = TOWN_TILE.W;
+const TILE_H = TOWN_TILE.H;
 
 function isoPos(x: number, y: number) {
   return {
@@ -107,70 +116,131 @@ export function FriendTownView({ snapshot }: { snapshot: FriendTownSnapshot }) {
             styles.board,
             {
               width: boardW + TILE_W,
-              height: boardH + TILE_H * 3,
+              height: boardH + TILE_H * 4,
               marginLeft: width / 2 - TILE_W / 2 - spacing.sm,
             },
             boardStyle,
           ]}>
+          <TownMeadow />
           {sorted.map((plot) => (
-            <ReadOnlyTile key={plot.id} plot={plot} />
+            <ReadOnlyTile key={plot.id} plot={plot} plots={snapshot.plots} />
           ))}
         </Animated.View>
-        <Text style={styles.hint}>Drag · pinch · view only</Text>
       </Animated.View>
     </GestureDetector>
   );
 }
 
-function ReadOnlyTile({ plot }: { plot: Plot }) {
+function ReadOnlyTile({ plot, plots }: { plot: Plot; plots: Plot[] }) {
   const now = Date.now();
   const pos = isoPos(plot.x, plot.y);
   let emoji = '';
   let label = '';
   let ready = false;
-  let soil = false;
+  let mode: 'empty' | 'crop' | 'building' | 'fog' | 'hidden' = 'empty';
+
+  const edge =
+    !plot.unlocked &&
+    [
+      [1, 0],
+      [-1, 0],
+      [0, 1],
+      [0, -1],
+    ].some(([dx, dy]) =>
+      plots.some(
+        (p) => p.unlocked && p.x === plot.x + dx && p.y === plot.y + dy
+      )
+    );
 
   if (!plot.unlocked) {
-    label = '';
+    mode = edge ? 'fog' : 'hidden';
   } else if (plot.kind === 'building' && plot.buildingId) {
-    emoji = BUILDINGS[plot.buildingId].emoji;
-    if (plot.processing && plot.processReadyAt) {
+    mode = 'building';
+    const shelf = plot.factoryShelf ?? [];
+    const queue = plot.factoryQueue ?? [];
+    const readyJobs = queue.filter((j) => j.readyAt <= now);
+    if (shelf.length || readyJobs.length) {
+      label = 'Ready';
+      ready = true;
+    } else if (queue.length) {
+      const soon = Math.min(...queue.map((j) => j.readyAt));
+      label = formatDuration(soon - now);
+    } else if (plot.processing && plot.processReadyAt) {
       if (now >= plot.processReadyAt) {
         label = 'Ready';
         ready = true;
       } else label = formatDuration(plot.processReadyAt - now);
     }
   } else if (plot.kind === 'crop' && plot.cropId && plot.readyAt) {
-    emoji = CROPS[plot.cropId].emoji;
-    soil = true;
+    emoji = CROPS[plot.cropId]?.emoji ?? '🌱';
+    mode = 'crop';
     if (now >= plot.readyAt) {
       label = 'Ready';
       ready = true;
     } else label = formatDuration(plot.readyAt - now);
   }
 
+  const colors = buildingColors(plot.buildingId);
+
+  if (mode === 'hidden') {
+    return (
+      <View
+        style={[
+          styles.tileWrap,
+          {
+            left: pos.left,
+            top: pos.top,
+            zIndex: 0,
+            width: TILE_W,
+            height: TILE_H + 20,
+          },
+        ]}
+        pointerEvents="none"
+      />
+    );
+  }
+
   return (
     <View
       style={[
         styles.tileWrap,
-        { left: pos.left, top: pos.top, zIndex: plot.x + plot.y },
+        {
+          left: pos.left,
+          top: pos.top,
+          zIndex: plot.x + plot.y + (mode === 'building' ? 2 : 0),
+          width: TILE_W,
+          height: TILE_H + 56,
+        },
       ]}>
-      <View
-        style={[
-          styles.diamond,
-          !plot.unlocked && styles.diamondLocked,
-          plot.unlocked && plot.kind === 'empty' && styles.diamondGrass,
-          soil && styles.diamondSoil,
-          ready && styles.diamondReady,
-        ]}
-      />
+      {mode === 'fog' && <FogPatch width={TILE_W - 20} height={TILE_H - 10} />}
+      {mode === 'crop' && (
+        <FarmBed
+          width={TILE_W - 14}
+          height={TILE_H - 8}
+          ready={ready}
+          uid={plot.id}
+        />
+      )}
+      {mode === 'building' && plot.buildingId && (
+        <>
+          <BuildingShadow width={80} />
+          <BuildingSprite
+            accent={colors.accent}
+            roof={colors.roof}
+            uid={plot.id}
+            kind={plot.buildingId}
+          />
+        </>
+      )}
       <View style={styles.tileFace}>
-        {!!emoji && <Text style={styles.tileEmoji}>{emoji}</Text>}
-        {!plot.unlocked && <Text style={styles.lockIcon}>🌫️</Text>}
-        {plot.unlocked && plot.kind === 'empty' && !emoji && (
-          <Text style={styles.grassTuft}>🌿</Text>
+        {mode === 'crop' && !!emoji && (
+          <Text style={styles.cropEmoji}>{emoji}</Text>
         )}
-        {!!label && <Text style={styles.tileLabel}>{label}</Text>}
+        {!!label && (
+          <View style={[styles.labelPill, ready && styles.labelReady]}>
+            <Text style={styles.tileLabel}>{label}</Text>
+          </View>
+        )}
       </View>
     </View>
   );
@@ -180,72 +250,44 @@ const styles = StyleSheet.create({
   viewport: {
     overflow: 'hidden',
     marginHorizontal: spacing.sm,
-    borderRadius: 18,
+    borderRadius: 28,
     borderWidth: 3,
-    borderColor: '#6B4423',
-    backgroundColor: '#5FAF45',
+    borderColor: '#6B9E45',
+    backgroundColor: '#5BB83A',
   },
   board: { position: 'relative' },
-  hint: {
-    position: 'absolute',
-    bottom: 8,
-    left: 0,
-    right: 0,
-    textAlign: 'center',
-    fontFamily: fonts.bodyBold,
-    fontSize: 11,
-    color: 'rgba(255,255,255,0.9)',
-  },
   tileWrap: {
     position: 'absolute',
-    width: TILE_W,
-    height: TILE_H + 34,
     alignItems: 'center',
-  },
-  diamond: {
-    position: 'absolute',
-    top: 10,
-    width: TILE_W - 10,
-    height: TILE_W - 10,
-    backgroundColor: '#7AC943',
-    transform: [{ rotate: '45deg' }, { scaleY: 0.55 }],
-    borderRadius: 8,
-    borderWidth: 2,
-    borderColor: 'rgba(60, 40, 15, 0.22)',
-  },
-  diamondGrass: {
-    backgroundColor: '#8EDB52',
-    borderColor: '#5AA32E',
-  },
-  diamondSoil: {
-    backgroundColor: '#C49A6C',
-    borderColor: '#8B6844',
-  },
-  diamondLocked: {
-    backgroundColor: '#A8B89A',
-    opacity: 0.88,
-  },
-  diamondReady: {
-    backgroundColor: '#FFD54F',
-    borderColor: '#F0A020',
   },
   tileFace: {
-    marginTop: 12,
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
     alignItems: 'center',
-    zIndex: 2,
+    zIndex: 4,
   },
-  tileEmoji: { fontSize: 26 },
-  grassTuft: { fontSize: 12, opacity: 0.85 },
-  lockIcon: { fontSize: 16 },
+  cropEmoji: {
+    fontSize: 24,
+    marginTop: 6,
+  },
+  labelPill: {
+    marginTop: 2,
+    backgroundColor: 'rgba(255,248,230,0.94)',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(107,68,35,0.2)',
+  },
+  labelReady: {
+    backgroundColor: '#FFE08A',
+    borderColor: '#E0A020',
+  },
   tileLabel: {
     fontFamily: fonts.bodyExtra,
     fontSize: 9,
     color: palette.ink,
-    backgroundColor: 'rgba(255,248,230,0.95)',
-    paddingHorizontal: 5,
-    paddingVertical: 1,
-    borderRadius: 5,
-    overflow: 'hidden',
-    marginTop: 2,
   },
 });

@@ -4,7 +4,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import { todayKey } from '@/lib/date';
 
-const WATCH_STORE = 'stepwize-pedometer-watch-v2';
+const WATCH_STORE = 'stepwize-pedometer-watch-v3';
 
 type WatchPersist = {
   date: string;
@@ -27,13 +27,32 @@ async function loadWatchPersist(): Promise<WatchPersist> {
   const date = todayKey();
   try {
     const raw = await AsyncStorage.getItem(WATCH_STORE);
-    if (!raw) return { date, watchedToday: 0, lastSensorTotal: null };
+    if (!raw) {
+      // migrate from v2 if present
+      const legacy = await AsyncStorage.getItem('stepwize-pedometer-watch-v2');
+      if (legacy) {
+        const parsed = JSON.parse(legacy) as WatchPersist;
+        if (parsed.date === date) {
+          return {
+            date,
+            watchedToday: parsed.watchedToday ?? 0,
+            lastSensorTotal: parsed.lastSensorTotal ?? null,
+          };
+        }
+        return {
+          date,
+          watchedToday: 0,
+          lastSensorTotal: parsed.lastSensorTotal ?? null,
+        };
+      }
+      return { date, watchedToday: 0, lastSensorTotal: null };
+    }
     const parsed = JSON.parse(raw) as WatchPersist;
     if (parsed.date !== date) {
       return {
         date,
         watchedToday: 0,
-        // Keep sensor absolute across midnight so overnight/morning walks still catch up
+        // Keep sensor absolute across midnight so overnight walks still catch up
         lastSensorTotal: parsed.lastSensorTotal ?? null,
       };
     }
@@ -90,7 +109,8 @@ export async function requestMotionPermission(): Promise<boolean> {
 }
 
 export async function readTodayStepsFromHistory(): Promise<number | null> {
-  if (Platform.OS === 'web') return null;
+  // iOS Core Motion history only — Android always returns null / throws
+  if (Platform.OS !== 'ios') return null;
   const available = await isPedometerAvailable();
   if (!available) return null;
 
@@ -106,9 +126,12 @@ export async function readTodayStepsFromHistory(): Promise<number | null> {
   }
 }
 
-/** One hardware sample of the absolute step counter (Android) / session counter. */
+/**
+ * Read absolute step-counter once. On Android this is usually since-boot.
+ * Some OEMs only emit after the next step — we wait longer and retry.
+ */
 export async function readAbsoluteSensorOnce(
-  timeoutMs = 2500
+  timeoutMs = 8000
 ): Promise<number | null> {
   if (Platform.OS === 'web') return null;
   try {
@@ -154,17 +177,20 @@ export async function applyAbsoluteSensorCatchUp(
   seedTotal = 0,
   opts?: { maxCatchUp?: number }
 ): Promise<number> {
-  const maxCatchUp = opts?.maxCatchUp ?? 40_000;
+  const maxCatchUp = opts?.maxCatchUp ?? 50_000;
   const persist = await loadWatchPersist();
   const history = await readTodayStepsFromHistory();
 
   let todayTotal = Math.max(history ?? 0, persist.watchedToday, seedTotal);
 
-  if (persist.lastSensorTotal != null && reading >= persist.lastSensorTotal) {
-    const gap = reading - persist.lastSensorTotal;
-    if (gap > 0) {
-      todayTotal += Math.min(gap, maxCatchUp);
+  if (persist.lastSensorTotal != null) {
+    if (reading >= persist.lastSensorTotal) {
+      const gap = reading - persist.lastSensorTotal;
+      if (gap > 0) {
+        todayTotal += Math.min(gap, maxCatchUp);
+      }
     }
+    // else: reboot / counter reset — keep today's total, re-baseline sensor
   }
 
   await saveWatchPersist({
@@ -179,27 +205,27 @@ export async function applyAbsoluteSensorCatchUp(
 /** Sync hardware → today's step total (for background tasks / resume). */
 export async function syncHardwareSteps(seedTotal = 0): Promise<number> {
   const history = await readTodayStepsFromHistory();
+
+  // iOS: prefer Core Motion day total (true closed-app history)
   if (history != null) {
     const persist = await loadWatchPersist();
     const todayTotal = Math.max(history, persist.watchedToday, seedTotal);
+    const abs = await readAbsoluteSensorOnce(5000);
     await saveWatchPersist({
       date: todayKey(),
       watchedToday: todayTotal,
-      lastSensorTotal: persist.lastSensorTotal,
+      lastSensorTotal: abs ?? persist.lastSensorTotal,
     });
-    // Still refresh absolute sensor so catch-up stays accurate
-    const abs = await readAbsoluteSensorOnce(1800);
-    if (abs != null) {
-      await saveWatchPersist({
-        date: todayKey(),
-        watchedToday: todayTotal,
-        lastSensorTotal: abs,
-      });
-    }
     return todayTotal;
   }
 
-  const abs = await readAbsoluteSensorOnce();
+  // Android: phone hardware keeps counting; we catch up the delta on wake
+  let abs = await readAbsoluteSensorOnce(8000);
+  if (abs == null) {
+    // Retry once — some devices need a moment after process wake
+    await new Promise((r) => setTimeout(r, 400));
+    abs = await readAbsoluteSensorOnce(6000);
+  }
   if (abs == null) {
     const persist = await loadWatchPersist();
     return Math.max(persist.watchedToday, seedTotal);
@@ -294,7 +320,7 @@ export async function startLiveStepTracking(
     if (!primed) {
       primed = true;
       // First live event: catch-up already applied in syncHardwareSteps;
-      // just lock the baseline for incremental updates.
+      // lock the baseline for incremental updates.
       lastWatchReading = reading;
       void persistNow(reading);
       return;
@@ -317,7 +343,7 @@ export async function startLiveStepTracking(
     if (delta <= 0) return;
 
     // Live ticks should be small; catch-up already handled closed-app gaps.
-    const safeDelta = Math.min(delta, 400);
+    const safeDelta = Math.min(delta, 500);
     todayTotal += safeDelta;
     void persistNow(reading);
     onSteps(todayTotal);
@@ -334,11 +360,11 @@ export async function startLiveStepTracking(
           onSteps(todayTotal);
         }
       } else {
-        // Periodic absolute refresh while app is open (covers sensor quirks)
-        const abs = await readAbsoluteSensorOnce(1200);
+        // Periodic absolute refresh while app is open
+        const abs = await readAbsoluteSensorOnce(2500);
         if (abs == null || lastWatchReading == null) return;
         if (abs > lastWatchReading) {
-          const gap = Math.min(abs - lastWatchReading, 2000);
+          const gap = Math.min(abs - lastWatchReading, 3000);
           if (gap > 0) {
             todayTotal += gap;
             lastWatchReading = abs;
@@ -348,14 +374,14 @@ export async function startLiveStepTracking(
         }
       }
     })();
-  }, Platform.OS === 'ios' ? 8000 : 20_000);
+  }, Platform.OS === 'ios' ? 8000 : 15_000);
 
   return {
     stop: () => {
       stopped = true;
       subscription?.remove();
       clearInterval(pollId);
-      // Freeze last sensor total so next launch can catch up
+      // Freeze last sensor total so next launch can catch up closed-app walks
       void persistNow(lastWatchReading);
     },
     status: {
@@ -367,7 +393,7 @@ export async function startLiveStepTracking(
       backgroundSync: true,
       message: historySupported
         ? 'Steps sync from your phone all day — open Stepwize anytime to credit coins.'
-        : 'Steps keep counting in the background. Open Stepwize periodically to sync coins (Android).',
+        : 'Your phone keeps counting while Stepwize is closed. Reopen to sync coins (Android).',
     },
   };
 }

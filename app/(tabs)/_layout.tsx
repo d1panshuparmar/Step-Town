@@ -3,7 +3,6 @@ import { useEffect } from 'react';
 import { Text } from 'react-native';
 
 import { fonts, palette } from '@/constants/theme';
-import { StepSyncProvider } from '@/hooks/useStepSync';
 import { useAuthStore } from '@/store/authStore';
 import { useGameStore } from '@/store/gameStore';
 
@@ -66,6 +65,10 @@ function TabsInner() {
       <Tabs.Screen name="goals" options={{ href: null }} />
       <Tabs.Screen name="friends" options={{ href: null }} />
       <Tabs.Screen name="achievements" options={{ href: null }} />
+      <Tabs.Screen name="quests" options={{ href: null }} />
+      <Tabs.Screen name="market" options={{ href: null }} />
+      <Tabs.Screen name="club" options={{ href: null }} />
+      <Tabs.Screen name="settings" options={{ href: null }} />
     </Tabs>
   );
 }
@@ -77,9 +80,5 @@ export default function TabLayout() {
   if (!user) return <Redirect href="/(auth)/welcome" />;
   if (!onboarded) return <Redirect href="/onboarding" />;
 
-  return (
-    <StepSyncProvider>
-      <TabsInner />
-    </StepSyncProvider>
-  );
+  return <TabsInner />;
 }

@@ -18,6 +18,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { LoadingGate } from '@/components/ui';
 import { palette } from '@/constants/theme';
 import { useCloudSync } from '@/hooks/useCloudSync';
+import { StepSyncProvider } from '@/hooks/useStepSync';
 import '@/lib/stepBackground';
 import { useAuthStore } from '@/store/authStore';
 import { useGameStore } from '@/store/gameStore';
@@ -69,20 +70,22 @@ export default function RootLayout() {
     <GestureHandlerRootView style={{ flex: 1, backgroundColor: palette.skyBottom }}>
       <StatusBar style="dark" />
       <LoadingGate ready={hydrated && authReady} />
-      <Stack
-        screenOptions={{
-          headerShown: false,
-          contentStyle: { backgroundColor: palette.skyBottom },
-        }}>
-        <Stack.Screen name="index" />
-        <Stack.Screen name="(auth)" />
-        <Stack.Screen name="onboarding" />
-        <Stack.Screen name="(tabs)" />
-        <Stack.Screen
-          name="friend/[id]"
-          options={{ presentation: 'card', animation: 'slide_from_right' }}
-        />
-      </Stack>
+      <StepSyncProvider>
+        <Stack
+          screenOptions={{
+            headerShown: false,
+            contentStyle: { backgroundColor: palette.skyBottom },
+          }}>
+          <Stack.Screen name="index" />
+          <Stack.Screen name="(auth)" />
+          <Stack.Screen name="onboarding" />
+          <Stack.Screen name="(tabs)" />
+          <Stack.Screen
+            name="friend/[id]"
+            options={{ presentation: 'card', animation: 'slide_from_right' }}
+          />
+        </Stack>
+      </StepSyncProvider>
     </GestureHandlerRootView>
   );
 }

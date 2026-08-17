@@ -6,7 +6,6 @@ import {
   PrimaryButton,
   Screen,
   SecondaryButton,
-  Subtitle,
   Title,
 } from '@/components/ui';
 import { fonts, palette, spacing } from '@/constants/theme';
@@ -24,7 +23,6 @@ export default function AchievementsScreen() {
     <Screen>
       <ScrollView contentContainerStyle={styles.content}>
         <Title>Badges</Title>
-        <Subtitle>Milestone rewards for your town</Subtitle>
 
         {achievements.map((a) => (
           <Panel key={a.id} style={styles.card}>

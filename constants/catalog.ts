@@ -3,16 +3,19 @@ import type {
   AchievementId,
   BuildingDef,
   CropDef,
+  FactoryRecipe,
   ItemId,
 } from '@/lib/types';
 
-export const GRID_SIZE = 6;
+export const GRID_SIZE = 7;
 
 export const STEPS_PER_COIN = 10;
 export const FULL_RATE_STEP_CAP = 12_000;
 export const WALK_GOAL_STEPS = 1_000;
 export const ORDER_EXPIRE_MS = 6 * 60 * 60 * 1000;
 export const BASE_WAREHOUSE = 40;
+export const BARN_LEVEL_BONUS = 15;
+export const BARN_UPGRADE_BASE = 80;
 export const MINE_ENERGY_PER_DIG = 400;
 export const MINE_COOLDOWN_MS = 8_000;
 
@@ -20,15 +23,43 @@ export function xpForLevel(level: number): number {
   return 40 + (level - 1) * 25;
 }
 
-export const ITEM_META: Record<ItemId, { name: string; emoji: string }> = {
-  wheat: { name: 'Wheat', emoji: '🌾' },
-  corn: { name: 'Corn', emoji: '🌽' },
-  carrot: { name: 'Carrot', emoji: '🥕' },
-  bread: { name: 'Bread', emoji: '🍞' },
-  feed: { name: 'Feed', emoji: '🥣' },
-  egg: { name: 'Egg', emoji: '🥚' },
-  milk: { name: 'Milk', emoji: '🥛' },
-  ore: { name: 'Ore', emoji: '🪨' },
+export function barnUpgradeCost(level: number): number {
+  return BARN_UPGRADE_BASE + level * 60;
+}
+
+export const ITEM_META: Record<ItemId, { name: string; emoji: string; sellPrice: number }> = {
+  wheat: { name: 'Wheat', emoji: '🌾', sellPrice: 2 },
+  corn: { name: 'Corn', emoji: '🌽', sellPrice: 3 },
+  carrot: { name: 'Carrot', emoji: '🥕', sellPrice: 4 },
+  tomato: { name: 'Tomato', emoji: '🍅', sellPrice: 5 },
+  sugarcane: { name: 'Sugarcane', emoji: '🎋', sellPrice: 4 },
+  potato: { name: 'Potato', emoji: '🥔', sellPrice: 4 },
+  cotton: { name: 'Cotton', emoji: '☁️', sellPrice: 5 },
+  strawberry: { name: 'Strawberry', emoji: '🍓', sellPrice: 6 },
+  rice: { name: 'Rice', emoji: '🍚', sellPrice: 5 },
+  pumpkin: { name: 'Pumpkin', emoji: '🎃', sellPrice: 7 },
+  apple: { name: 'Apple', emoji: '🍎', sellPrice: 6 },
+  bread: { name: 'Bread', emoji: '🍞', sellPrice: 8 },
+  feed: { name: 'Feed', emoji: '🥣', sellPrice: 4 },
+  egg: { name: 'Egg', emoji: '🥚', sellPrice: 7 },
+  milk: { name: 'Milk', emoji: '🥛', sellPrice: 9 },
+  sugar: { name: 'Sugar', emoji: '🧂', sellPrice: 10 },
+  juice: { name: 'Juice', emoji: '🧃', sellPrice: 12 },
+  ore: { name: 'Ore', emoji: '🪨', sellPrice: 6 },
+  cheese: { name: 'Cheese', emoji: '🧀', sellPrice: 14 },
+  butter: { name: 'Butter', emoji: '🧈', sellPrice: 12 },
+  cream: { name: 'Cream', emoji: '🍦', sellPrice: 11 },
+  cookies: { name: 'Cookies', emoji: '🍪', sellPrice: 15 },
+  cake: { name: 'Cake', emoji: '🍰', sellPrice: 22 },
+  jam: { name: 'Jam', emoji: '🫙', sellPrice: 16 },
+  cloth: { name: 'Cloth', emoji: '🧵', sellPrice: 14 },
+  wool: { name: 'Wool', emoji: '🧶', sellPrice: 10 },
+  honey: { name: 'Honey', emoji: '🍯', sellPrice: 13 },
+  fish: { name: 'Fish', emoji: '🐟', sellPrice: 8 },
+  wood: { name: 'Wood', emoji: '🪵', sellPrice: 5 },
+  clay: { name: 'Clay', emoji: '🧱', sellPrice: 5 },
+  iron: { name: 'Iron', emoji: '⚙️', sellPrice: 9 },
+  coal: { name: 'Coal', emoji: '⬛', sellPrice: 7 },
 };
 
 export const CROPS: Record<string, CropDef> = {
@@ -37,7 +68,7 @@ export const CROPS: Record<string, CropDef> = {
     name: 'Wheat',
     emoji: '🌾',
     seedCost: 5,
-    growMs: 20_000,
+    growMs: 45_000,
     yieldItem: 'wheat',
     yieldQty: 2,
     unlockLevel: 1,
@@ -47,7 +78,7 @@ export const CROPS: Record<string, CropDef> = {
     name: 'Corn',
     emoji: '🌽',
     seedCost: 10,
-    growMs: 40_000,
+    growMs: 75_000,
     yieldItem: 'corn',
     yieldQty: 2,
     unlockLevel: 2,
@@ -57,12 +88,110 @@ export const CROPS: Record<string, CropDef> = {
     name: 'Carrot',
     emoji: '🥕',
     seedCost: 15,
-    growMs: 60_000,
+    growMs: 100_000,
     yieldItem: 'carrot',
     yieldQty: 2,
     unlockLevel: 3,
   },
+  tomato: {
+    id: 'tomato',
+    name: 'Tomato',
+    emoji: '🍅',
+    seedCost: 20,
+    growMs: 140_000,
+    yieldItem: 'tomato',
+    yieldQty: 2,
+    unlockLevel: 4,
+  },
+  sugarcane: {
+    id: 'sugarcane',
+    name: 'Sugarcane',
+    emoji: '🎋',
+    seedCost: 18,
+    growMs: 160_000,
+    yieldItem: 'sugarcane',
+    yieldQty: 2,
+    unlockLevel: 5,
+  },
+  potato: {
+    id: 'potato',
+    name: 'Potato',
+    emoji: '🥔',
+    seedCost: 22,
+    growMs: 120_000,
+    yieldItem: 'potato',
+    yieldQty: 2,
+    unlockLevel: 6,
+  },
+  cotton: {
+    id: 'cotton',
+    name: 'Cotton',
+    emoji: '☁️',
+    seedCost: 28,
+    growMs: 180_000,
+    yieldItem: 'cotton',
+    yieldQty: 2,
+    unlockLevel: 7,
+  },
+  strawberry: {
+    id: 'strawberry',
+    name: 'Strawberry',
+    emoji: '🍓',
+    seedCost: 32,
+    growMs: 150_000,
+    yieldItem: 'strawberry',
+    yieldQty: 2,
+    unlockLevel: 7,
+  },
+  rice: {
+    id: 'rice',
+    name: 'Rice',
+    emoji: '🍚',
+    seedCost: 26,
+    growMs: 170_000,
+    yieldItem: 'rice',
+    yieldQty: 2,
+    unlockLevel: 8,
+  },
+  pumpkin: {
+    id: 'pumpkin',
+    name: 'Pumpkin',
+    emoji: '🎃',
+    seedCost: 36,
+    growMs: 200_000,
+    yieldItem: 'pumpkin',
+    yieldQty: 1,
+    unlockLevel: 9,
+  },
+  apple: {
+    id: 'apple',
+    name: 'Apple',
+    emoji: '🍎',
+    seedCost: 40,
+    growMs: 220_000,
+    yieldItem: 'apple',
+    yieldQty: 2,
+    unlockLevel: 10,
+  },
 };
+
+function recipe(
+  id: string,
+  input: ItemId,
+  inputQty: number,
+  output: ItemId,
+  outputQty: number,
+  processMs: number,
+  input2?: ItemId,
+  input2Qty?: number
+): FactoryRecipe {
+  const r: FactoryRecipe = { id, input, inputQty, output, outputQty, processMs };
+  if (input2 && input2Qty) {
+    r.input2 = input2;
+    r.input2Qty = input2Qty;
+  }
+  return r;
+}
 
 export const BUILDINGS: Record<string, BuildingDef> = {
   house: {
@@ -76,11 +205,23 @@ export const BUILDINGS: Record<string, BuildingDef> = {
     population: 2,
     happiness: 1,
   },
+  apartment: {
+    id: 'apartment',
+    name: 'Apartment',
+    emoji: '🏢',
+    description: 'Houses 4 townsfolk.',
+    cost: 280,
+    unlockLevel: 5,
+    kind: 'home',
+    population: 4,
+    happiness: 2,
+    minPopulation: 4,
+  },
   barn: {
     id: 'barn',
     name: 'Barn',
     emoji: '🏚️',
-    description: '+20 warehouse capacity.',
+    description: '+20 barn capacity.',
     cost: 80,
     unlockLevel: 1,
     kind: 'storage',
@@ -91,17 +232,24 @@ export const BUILDINGS: Record<string, BuildingDef> = {
     id: 'bakery',
     name: 'Bakery',
     emoji: '🥖',
-    description: 'Bake wheat into bread.',
+    description: 'Bake bread, cookies, and cake.',
     cost: 120,
     unlockLevel: 2,
     kind: 'factory',
     unique: true,
+    queueSlots: 2,
+    shelfSlots: 2,
+    recipes: [
+      recipe('bread', 'wheat', 2, 'bread', 1, 28_000),
+      recipe('cookies', 'wheat', 1, 'cookies', 1, 36_000, 'sugar', 1),
+      recipe('cake', 'wheat', 2, 'cake', 1, 55_000, 'milk', 1),
+    ],
     recipe: {
       input: 'wheat',
       inputQty: 2,
       output: 'bread',
       outputQty: 1,
-      processMs: 25_000,
+      processMs: 28_000,
     },
   },
   feed_mill: {
@@ -113,12 +261,15 @@ export const BUILDINGS: Record<string, BuildingDef> = {
     unlockLevel: 2,
     kind: 'factory',
     unique: true,
+    queueSlots: 2,
+    shelfSlots: 2,
+    recipes: [recipe('feed', 'corn', 2, 'feed', 2, 24_000)],
     recipe: {
       input: 'corn',
       inputQty: 2,
       output: 'feed',
       outputQty: 2,
-      processMs: 22_000,
+      processMs: 24_000,
     },
   },
   chicken_coop: {
@@ -130,30 +281,224 @@ export const BUILDINGS: Record<string, BuildingDef> = {
     unlockLevel: 3,
     kind: 'factory',
     unique: true,
+    minPopulation: 2,
+    queueSlots: 2,
+    shelfSlots: 2,
+    recipes: [recipe('egg', 'feed', 1, 'egg', 2, 32_000)],
     recipe: {
       input: 'feed',
       inputQty: 1,
       output: 'egg',
       outputQty: 2,
-      processMs: 30_000,
+      processMs: 32_000,
     },
   },
   dairy: {
     id: 'dairy',
     name: 'Dairy',
     emoji: '🐄',
-    description: 'Turn corn into fresh milk.',
+    description: 'Milk, cream, cheese, and butter.',
     cost: 200,
     unlockLevel: 4,
     kind: 'factory',
     unique: true,
+    minPopulation: 4,
+    queueSlots: 2,
+    shelfSlots: 2,
+    recipes: [
+      recipe('milk', 'corn', 3, 'milk', 1, 38_000),
+      recipe('cream', 'milk', 1, 'cream', 1, 30_000),
+      recipe('cheese', 'milk', 2, 'cheese', 1, 42_000),
+      recipe('butter', 'cream', 1, 'butter', 1, 28_000),
+    ],
     recipe: {
       input: 'corn',
       inputQty: 3,
       output: 'milk',
       outputQty: 1,
-      processMs: 35_000,
+      processMs: 38_000,
     },
+  },
+  sugar_mill: {
+    id: 'sugar_mill',
+    name: 'Sugar Mill',
+    emoji: '🍬',
+    description: 'Refine sugarcane into sugar.',
+    cost: 260,
+    unlockLevel: 5,
+    kind: 'factory',
+    unique: true,
+    minPopulation: 6,
+    queueSlots: 2,
+    shelfSlots: 2,
+    recipes: [recipe('sugar', 'sugarcane', 2, 'sugar', 1, 40_000)],
+  },
+  juice_plant: {
+    id: 'juice_plant',
+    name: 'Juice Plant',
+    emoji: '🧃',
+    description: 'Press juice and cook jam.',
+    cost: 280,
+    unlockLevel: 5,
+    kind: 'factory',
+    unique: true,
+    minPopulation: 6,
+    queueSlots: 2,
+    shelfSlots: 2,
+    recipes: [
+      recipe('juice', 'tomato', 2, 'juice', 1, 42_000),
+      recipe('apple_juice', 'apple', 2, 'juice', 1, 40_000),
+      recipe('jam', 'strawberry', 2, 'jam', 1, 45_000, 'sugar', 1),
+    ],
+  },
+  textile_mill: {
+    id: 'textile_mill',
+    name: 'Textile Mill',
+    emoji: '🧶',
+    description: 'Spin cotton into cloth.',
+    cost: 320,
+    unlockLevel: 7,
+    kind: 'factory',
+    unique: true,
+    minPopulation: 8,
+    queueSlots: 2,
+    shelfSlots: 2,
+    recipes: [
+      recipe('cloth', 'cotton', 2, 'cloth', 1, 48_000),
+      recipe('wool_cloth', 'wool', 2, 'cloth', 1, 44_000),
+    ],
+  },
+  pigsty: {
+    id: 'pigsty',
+    name: 'Pigsty',
+    emoji: '🐷',
+    description: 'Feed pigs — they return extra corn.',
+    cost: 220,
+    unlockLevel: 5,
+    kind: 'factory',
+    unique: true,
+    minPopulation: 4,
+    queueSlots: 2,
+    shelfSlots: 2,
+    recipes: [recipe('pig_corn', 'feed', 1, 'corn', 3, 50_000)],
+  },
+  sheep_pen: {
+    id: 'sheep_pen',
+    name: 'Sheep Pen',
+    emoji: '🐑',
+    description: 'Feed sheep for wool.',
+    cost: 240,
+    unlockLevel: 6,
+    kind: 'factory',
+    unique: true,
+    minPopulation: 6,
+    queueSlots: 2,
+    shelfSlots: 2,
+    recipes: [recipe('wool', 'feed', 1, 'wool', 1, 46_000)],
+  },
+  beehive: {
+    id: 'beehive',
+    name: 'Beehive',
+    emoji: '🐝',
+    description: 'Bees make honey from sugarcane nectar.',
+    cost: 200,
+    unlockLevel: 6,
+    kind: 'factory',
+    unique: true,
+    minPopulation: 4,
+    queueSlots: 2,
+    shelfSlots: 2,
+    recipes: [recipe('honey', 'sugarcane', 1, 'honey', 1, 40_000)],
+  },
+  cafe: {
+    id: 'cafe',
+    name: 'Cafe',
+    emoji: '☕',
+    description: 'A cozy hangout — boosts happiness.',
+    cost: 260,
+    unlockLevel: 6,
+    kind: 'service',
+    unique: true,
+    happiness: 6,
+    minPopulation: 6,
+  },
+  school: {
+    id: 'school',
+    name: 'School',
+    emoji: '🏫',
+    description: 'Education for the town.',
+    cost: 340,
+    unlockLevel: 7,
+    kind: 'service',
+    unique: true,
+    happiness: 7,
+    population: 1,
+    minPopulation: 8,
+  },
+  hospital: {
+    id: 'hospital',
+    name: 'Hospital',
+    emoji: '🏥',
+    description: 'Care for townsfolk — big happiness.',
+    cost: 400,
+    unlockLevel: 8,
+    kind: 'service',
+    unique: true,
+    happiness: 8,
+    minPopulation: 10,
+  },
+  market: {
+    id: 'market',
+    name: 'Market',
+    emoji: '🏪',
+    description: 'A busy square for traders.',
+    cost: 300,
+    unlockLevel: 6,
+    kind: 'service',
+    unique: true,
+    happiness: 5,
+    population: 1,
+    minPopulation: 6,
+  },
+  road: {
+    id: 'road',
+    name: 'Road',
+    emoji: '🛤️',
+    description: 'Connect the town with paths.',
+    cost: 25,
+    unlockLevel: 1,
+    kind: 'road',
+    happiness: 1,
+  },
+  fountain: {
+    id: 'fountain',
+    name: 'Fountain',
+    emoji: '⛲',
+    description: 'A sparkling centerpiece.',
+    cost: 180,
+    unlockLevel: 4,
+    kind: 'decor',
+    happiness: 5,
+  },
+  lamp: {
+    id: 'lamp',
+    name: 'Street Lamp',
+    emoji: '🏮',
+    description: 'Light the lanes at dusk.',
+    cost: 50,
+    unlockLevel: 2,
+    kind: 'decor',
+    happiness: 2,
+  },
+  fence: {
+    id: 'fence',
+    name: 'Fence',
+    emoji: '🪵',
+    description: 'Neat borders for your plots.',
+    cost: 35,
+    unlockLevel: 1,
+    kind: 'decor',
+    happiness: 1,
   },
   flower_bed: {
     id: 'flower_bed',
@@ -186,7 +531,31 @@ export const BUILDINGS: Record<string, BuildingDef> = {
     happiness: 4,
     population: 1,
   },
+  statue: {
+    id: 'statue',
+    name: 'Town Statue',
+    emoji: '🗿',
+    description: 'A proud landmark for the square.',
+    cost: 220,
+    unlockLevel: 4,
+    kind: 'decor',
+    happiness: 5,
+    minPopulation: 4,
+  },
 };
+
+export function factoryRecipes(def: BuildingDef): FactoryRecipe[] {
+  if (def.recipes?.length) return def.recipes;
+  if (def.recipe) {
+    return [
+      {
+        id: def.recipe.output,
+        ...def.recipe,
+      },
+    ];
+  }
+  return [];
+}
 
 export const CUSTOMERS = [
   'Mira',
@@ -199,6 +568,8 @@ export const CUSTOMERS = [
   'Ivy',
   'Kai',
   'Rue',
+  'Helga',
+  'Omar',
 ];
 
 export const ACHIEVEMENT_DEFS: Record<
@@ -212,7 +583,7 @@ export const ACHIEVEMENT_DEFS: Record<
   },
   first_order: {
     title: 'Open for Business',
-    description: 'Complete your first town order.',
+    description: 'Complete your first helicopter order.',
     rewardCoins: 40,
   },
   streak_3: {
@@ -239,6 +610,36 @@ export const ACHIEVEMENT_DEFS: Record<
     title: 'Egg Basket',
     description: 'Collect eggs from the coop.',
     rewardCoins: 45,
+  },
+  farmer_100: {
+    title: 'Farmer',
+    description: 'Harvest 100 crops.',
+    rewardCoins: 120,
+  },
+  builder_10: {
+    title: 'Builder',
+    description: 'Construct 10 buildings.',
+    rewardCoins: 100,
+  },
+  entrepreneur: {
+    title: 'Entrepreneur',
+    description: 'Earn 10,000 coins lifetime.',
+    rewardCoins: 150,
+  },
+  industrialist: {
+    title: 'Industrialist',
+    description: 'Produce 100 factory goods.',
+    rewardCoins: 140,
+  },
+  socialite: {
+    title: 'Club Mate',
+    description: 'Join a cooperative club.',
+    rewardCoins: 80,
+  },
+  angler: {
+    title: 'Angler',
+    description: 'Catch 20 fish.',
+    rewardCoins: 90,
   },
 };
 

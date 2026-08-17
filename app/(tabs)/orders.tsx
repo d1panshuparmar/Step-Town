@@ -6,7 +6,6 @@ import {
   Panel,
   PrimaryButton,
   Screen,
-  Subtitle,
   Title,
 } from '@/components/ui';
 import { ITEM_META } from '@/constants/catalog';
@@ -29,8 +28,7 @@ export default function OrdersScreen() {
   return (
     <Screen>
       <ScrollView contentContainerStyle={styles.content}>
-        <Title>Orders</Title>
-        <Subtitle>Deliver goods for coins & XP</Subtitle>
+        <Title>🚁 Helicopter</Title>
 
         {orders.map((order) => {
           const remaining = order.expiresAt - Date.now();
